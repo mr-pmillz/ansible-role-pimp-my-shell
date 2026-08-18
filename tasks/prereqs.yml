@@ -1,0 +1,9 @@
+# code: language=ansible
+---
+- name: Install prerequisite packages (Debian family)
+  ansible.builtin.include_tasks: prereqs-debian.yml
+  when: ansible_facts['os_family'] == 'Debian'
+
+- name: Install prerequisite packages (macOS)
+  ansible.builtin.include_tasks: prereqs-macos.yml
+  when: ansible_facts['os_family'] == 'Darwin'

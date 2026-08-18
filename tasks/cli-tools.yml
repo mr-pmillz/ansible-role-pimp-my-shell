@@ -1,0 +1,69 @@
+# code: language=ansible
+---
+- name: Ensure ~/.config/bat directory exists
+  ansible.builtin.file:
+    path: "{{ ansible_facts['env']['HOME'] }}/.config/bat"
+    state: directory
+    mode: "0755"
+
+- name: Copy Bat config template
+  ansible.builtin.template:
+    src: "{{ role_path }}/templates/bat_config.j2"
+    dest: "{{ ansible_facts['env']['HOME'] }}/.config/bat/config"
+    owner: "{{ ansible_facts['user_id'] }}"
+    group: "{{ ansible_facts['user_gid'] }}"
+    mode: "0644"
+
+# Debian and Ubuntu ship the bat binary as batcat (name clash with bacula);
+# expose it as `bat` in ~/.local/bin (already on PATH via zshrc_append.zsh)
+# so the shipped aliases that call `bat` work. Kali/Parrot/macOS install it
+# as plain bat, so the stat guard skips this there.
+- name: Check if bat is installed as batcat (Debian family)
+  ansible.builtin.stat:
+    path: /usr/bin/batcat
+  register: batcat_stat
+  when: ansible_facts['os_family'] == 'Debian'
+
+- name: Ensure ~/.local/bin exists
+  ansible.builtin.file:
+    path: "{{ ansible_facts['env']['HOME'] }}/.local/bin"
+    state: directory
+    mode: "0755"
+  when:
+    - ansible_facts['os_family'] == 'Debian'
+    - batcat_stat.stat.exists
+
+- name: Symlink batcat to ~/.local/bin/bat
+  ansible.builtin.file:
+    src: /usr/bin/batcat
+    dest: "{{ ansible_facts['env']['HOME'] }}/.local/bin/bat"
+    state: link
+  when:
+    - ansible_facts['os_family'] == 'Debian'
+    - batcat_stat.stat.exists
+
+# fzf's install script downloads the prebuilt binary for the host's own
+# OS/architecture (amd64/arm64), so no arch pinning is needed here.
+- name: Cloning fzf
+  ansible.builtin.git:  # noqa: latest[git] — intentionally tracks upstream default branch
+    repo: https://github.com/junegunn/fzf
+    dest: "{{ ansible_facts['env']['HOME'] }}/.fzf"
+    depth: 1
+    update: false
+
+- name: Check if fzf already installed
+  ansible.builtin.stat:
+    path: "{{ ansible_facts['env']['HOME'] }}/fzf_is_installed.txt"
+  register: fzf_is_installed
+
+- name: Install fzf
+  ansible.builtin.command: bash {{ ansible_facts['env']['HOME'] }}/.fzf/install --all
+  changed_when: true
+  when: not fzf_is_installed.stat.exists
+
+- name: Create fzf already installed file
+  ansible.builtin.file:
+    path: "{{ ansible_facts['env']['HOME'] }}/fzf_is_installed.txt"
+    state: touch
+    mode: "0644"
+  when: not fzf_is_installed.stat.exists

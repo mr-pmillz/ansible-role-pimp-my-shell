@@ -1,0 +1,22 @@
+# code: language=ansible
+---
+# Install only the packages the selected components actually need.
+# Requires sudo (run the play with -K or passwordless sudo).
+- name: Compute prerequisite apt package list for selected components
+  ansible.builtin.set_fact:
+    pimp_my_shell_packages: >-
+      {{ (['base'] + pimp_my_shell_components)
+         | map('extract', pimp_my_shell_debian_component_packages)
+         | select('defined') | flatten | unique | sort }}
+
+- name: Update apt cache
+  become: true
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Install prerequisite apt packages
+  become: true
+  ansible.builtin.apt:
+    name: "{{ pimp_my_shell_packages }}"
+    state: present

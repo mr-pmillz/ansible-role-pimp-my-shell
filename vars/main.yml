@@ -1,0 +1,112 @@
+# code: language=ansible
+---
+# vars file for pimp_my_shell
+#
+# Defined in vars/ (not defaults/) so these cannot be accidentally
+# overridden by inventory or group_vars.
+
+# ── Supported platforms and architectures ─────────────────────────────────
+# ansible_facts['distribution'] values this role supports.
+pimp_my_shell_supported_distributions:
+  - Ubuntu
+  - Debian
+  - Linux Mint
+  - Kali
+  - Parrot
+  - MacOSX
+
+# Normalization map from ansible_facts['architecture'] to a canonical
+# architecture label. Anything not in this map is unsupported.
+pimp_my_shell_arch_map:
+  x86_64: amd64
+  amd64: amd64
+  aarch64: arm64
+  arm64: arm64
+
+# ── Selective installation (driven by the only_* flags in defaults/main.yml) ──
+# Every component this role can configure, in execution order.
+pimp_my_shell_all_components:
+  - nerdfonts
+  - zsh
+  - console_setup
+  - tmux
+  - cli_tools
+  - vim
+  - bashrc
+  - terminal_profiles
+
+# Components explicitly requested via only_* flags. Flags union, so
+# only_vim + only_tmux yields ['tmux', 'vim'].
+pimp_my_shell_selected_components: >-
+  {{ (['nerdfonts'] if only_nerdfonts | bool else [])
+     + (['zsh'] if only_zsh | bool else [])
+     + (['console_setup'] if only_console_setup | bool else [])
+     + (['tmux'] if only_tmux | bool else [])
+     + (['cli_tools'] if only_cli_tools | bool else [])
+     + (['vim'] if only_vim | bool else [])
+     + (['bashrc'] if only_bashrc | bool else [])
+     + (['terminal_profiles'] if only_terminal_profiles | bool else []) }}
+
+# What actually runs: the explicit selection if any only_* flag is set,
+# otherwise everything. Tasks in main.yml gate on membership of this list.
+# Advanced callers may pass this directly as a role parameter (which outranks
+# this definition) instead of using the only_* flags.
+pimp_my_shell_components: >-
+  {{ pimp_my_shell_selected_components
+     if pimp_my_shell_selected_components | length > 0
+     else pimp_my_shell_all_components }}
+
+# ── Prerequisite packages per component ───────────────────────────────────
+# Only the packages the selected components actually need get installed.
+# 'base' is always included. Components with no packaged prerequisites
+# (console_setup installs its own, bashrc needs nothing) are simply absent.
+pimp_my_shell_debian_component_packages:
+  base:
+    - ca-certificates
+    - curl
+    - git
+  nerdfonts:
+    - fontconfig
+  zsh:
+    - zsh
+  tmux:
+    - tmux
+  cli_tools:
+    - bat
+  vim:
+    - build-essential
+    - cmake
+    - python3-dev
+    - vim-nox
+  terminal_profiles:
+    - dbus
+    - dconf-cli
+    - python3-psutil
+
+# Homebrew formula equivalents for macOS. curl and fontconfig are omitted
+# (macOS ships curl and auto-detects fonts); vim-nox maps to plain vim,
+# whose Homebrew build includes python3 support for YouCompleteMe.
+pimp_my_shell_darwin_component_packages:
+  base:
+    - git
+  zsh:
+    - zsh
+  tmux:
+    - tmux
+  cli_tools:
+    - bat
+  vim:
+    - cmake
+    - vim
+
+# ── Nerd Fonts ────────────────────────────────────────────────────────────
+fonts_dir: "{{ ansible_facts['env']['HOME'] }}/.local/share/fonts"
+meslo_fonts:
+  - name: MesloLGS NF Regular.ttf
+    url: https://github.com/romkatv/powerlevel10k-media/raw/master/MesloLGS%20NF%20Regular.ttf
+  - name: MesloLGS NF Bold.ttf
+    url: https://github.com/romkatv/powerlevel10k-media/raw/master/MesloLGS%20NF%20Bold.ttf
+  - name: MesloLGS NF Italic.ttf
+    url: https://github.com/romkatv/powerlevel10k-media/raw/master/MesloLGS%20NF%20Italic.ttf
+  - name: MesloLGS NF Bold Italic.ttf
+    url: https://github.com/romkatv/powerlevel10k-media/raw/master/MesloLGS%20NF%20Bold%20Italic.ttf

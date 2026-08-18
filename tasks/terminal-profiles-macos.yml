@@ -1,0 +1,21 @@
+# code: language=ansible
+---
+# Terminal.app ships "Pro" (dark) and "Basic" (light) profiles out of the box,
+# so unlike the Kali/Parrot/Ubuntu tasks, no profile file needs to be imported.
+- name: Select macOS Terminal.app profile based on dark_mode
+  ansible.builtin.set_fact:
+    macos_terminal_profile: "{{ 'Pro' if dark_mode | default(false) else 'Basic' }}"
+
+- name: Set default Terminal.app profile (macOS)
+  community.general.osx_defaults:
+    domain: com.apple.Terminal
+    key: Default Window Settings
+    type: string
+    value: "{{ macos_terminal_profile }}"
+
+- name: Set startup Terminal.app profile (macOS)
+  community.general.osx_defaults:
+    domain: com.apple.Terminal
+    key: Startup Window Settings
+    type: string
+    value: "{{ macos_terminal_profile }}"

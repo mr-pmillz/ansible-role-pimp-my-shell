@@ -1,0 +1,49 @@
+# code: language=ansible
+---
+galaxy_info:
+  role_name: pimp_my_shell
+  namespace: mr_pmillz
+  author: mr-pmillz
+  description: >-
+    Terminal customization for Ubuntu, Debian, Linux Mint, Kali, Parrot,
+    and macOS (amd64/arm64) — oh-my-zsh + powerlevel10k, oh-my-tmux + TPM,
+    awesome-vimrc, bat, fzf, MesloLGS Nerd Fonts, and per-OS terminal profiles.
+  company: Black Hills Information Security
+  license: Apache-2.0
+
+  min_ansible_version: "2.15"
+
+  platforms:
+    - name: Ubuntu
+      versions:
+        - all
+    - name: Debian
+      versions:
+        - all
+    - name: MacOSX
+      versions:
+        - all
+
+  galaxy_tags:
+    - terminal
+    - zsh
+    - ohmyzsh
+    - powerlevel10k
+    - tmux
+    - vim
+    - dotfiles
+    - shell
+    - macos
+    - ubuntu
+    - debian
+    - kali
+    - parrot
+
+# oh-my-zsh itself is provided by gantsign.oh-my-zsh on Linux. On macOS the
+# Galaxy role is skipped (it is not verified on Darwin) and this role
+# bootstraps oh-my-zsh via the official installer script instead.
+dependencies:
+  - role: gantsign.oh-my-zsh
+    vars:
+      users: "{{ oh_my_zsh_users | default([{'username': ansible_facts['user_id']}]) }}"
+    when: ansible_facts['os_family'] != 'Darwin'

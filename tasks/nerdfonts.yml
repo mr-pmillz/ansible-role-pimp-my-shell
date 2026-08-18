@@ -1,0 +1,32 @@
+# code: language=ansible
+---
+- name: Set fonts directory for macOS
+  ansible.builtin.set_fact:
+    fonts_dir: "{{ ansible_facts['env']['HOME'] }}/Library/Fonts"
+  when: ansible_facts['distribution'] == 'MacOSX'
+
+- name: Ensure fonts directory exists
+  ansible.builtin.file:
+    path: "{{ fonts_dir }}"
+    state: directory
+    mode: "0755"
+
+- name: Download Meslo Nerd Fonts
+  ansible.builtin.get_url:
+    url: "{{ item.url }}"
+    dest: "{{ fonts_dir }}/{{ item.name }}"
+    mode: "0644"
+    timeout: 30
+  loop: "{{ meslo_fonts }}"
+  register: font_download
+  until: font_download is succeeded
+  retries: 3
+  delay: 5
+
+# macOS picks up new fonts automatically; fontconfig only exists on Linux.
+- name: Refresh font cache (Linux)
+  ansible.builtin.command: fc-cache -f -v
+  changed_when: true
+  when:
+    - ansible_facts['distribution'] != 'MacOSX'
+    - font_download is changed

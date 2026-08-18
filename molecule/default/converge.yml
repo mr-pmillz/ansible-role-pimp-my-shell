@@ -1,0 +1,11 @@
+# code: language=ansible
+---
+- name: Converge
+  hosts: all
+  gather_facts: true
+  vars:
+    dark_mode: true
+  roles:
+    # gantsign.oh-my-zsh runs automatically first via meta/main.yml
+    # dependencies (Linux only).
+    - role: mr_pmillz.pimp_my_shell

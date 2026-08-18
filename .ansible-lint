@@ -1,0 +1,17 @@
+---
+profile: moderate
+
+exclude_paths:
+  - files/
+  - .github/
+  - .cache/
+  - .ansible/
+
+skip_list:
+  # The public variable API deliberately keeps short names (only_vim,
+  # dark_mode, oh_my_zsh_theme) for ergonomics and compatibility with the
+  # gantsign.oh-my-zsh role, which consumes the oh_my_zsh_* variables.
+  - var-naming[no-role-prefix]
+  # meta/main.yml platform list covers Debian derivatives (Kali, Parrot,
+  # Linux Mint) via the Debian entry; galaxy has no entries for them.
+  - meta-no-info

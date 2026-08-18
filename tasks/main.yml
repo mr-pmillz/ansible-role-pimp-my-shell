@@ -1,0 +1,121 @@
+# code: language=ansible
+---
+# Which components run is decided by pimp_my_shell_components (vars/main.yml),
+# which is derived from the only_* flags in defaults/main.yml. With no only_*
+# flag set the list contains everything, so the default behaviour is to
+# configure every component.
+
+# ── Platform and architecture validation ──────────────────────────────────
+- name: Detect and normalize CPU architecture
+  ansible.builtin.set_fact:
+    pimp_my_shell_arch: "{{ pimp_my_shell_arch_map[ansible_facts['architecture']] | default('unsupported') }}"
+
+- name: Verify supported distribution and architecture
+  ansible.builtin.assert:
+    that:
+      - ansible_facts['distribution'] in pimp_my_shell_supported_distributions
+      - pimp_my_shell_arch in ['amd64', 'arm64']
+    fail_msg: >-
+      Unsupported platform: {{ ansible_facts['distribution'] }}
+      ({{ ansible_facts['architecture'] }}). Supported distributions:
+      {{ pimp_my_shell_supported_distributions | join(', ') }} on amd64/arm64.
+    success_msg: >-
+      {{ ansible_facts['distribution'] }} {{ ansible_facts['distribution_version'] }}
+      on {{ pimp_my_shell_arch }} ({{ ansible_facts['architecture'] }}) is supported.
+
+- name: Report which terminal components will be configured
+  ansible.builtin.debug:
+    msg: >-
+      Configuring: {{ pimp_my_shell_components | join(', ') }}
+      {{ '(all components; set an only_* flag to narrow this)'
+         if pimp_my_shell_selected_components | length == 0
+         else '(narrowed by only_* flags)' }}
+
+# ── Prerequisite packages (apt / Homebrew) ────────────────────────────────
+- name: Install prerequisite packages
+  ansible.builtin.include_tasks: prereqs.yml
+  when: install_prerequisites | bool
+
+# ── Components ────────────────────────────────────────────────────────────
+- name: Install nerdfonts
+  ansible.builtin.include_tasks: nerdfonts.yml
+  when: "'nerdfonts' in pimp_my_shell_components"
+
+# On Linux, oh-my-zsh itself is installed by the gantsign.oh-my-zsh Galaxy
+# role (a dependency in meta/main.yml). On macOS that role is skipped, so
+# bootstrap oh-my-zsh here via the official installer instead.
+- name: Check if oh-my-zsh is already installed (macOS)
+  ansible.builtin.stat:
+    path: "{{ ansible_facts['env']['HOME'] }}/.oh-my-zsh"
+  register: ohmyzsh_dir_stat
+  when:
+    - "'zsh' in pimp_my_shell_components"
+    - ansible_facts['distribution'] == 'MacOSX'
+
+- name: Install oh-my-zsh (macOS)
+  ansible.builtin.shell: |
+    set -e
+    sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
+  args:
+    executable: /bin/bash
+  changed_when: true
+  when:
+    - "'zsh' in pimp_my_shell_components"
+    - ansible_facts['distribution'] == 'MacOSX'
+    - not ohmyzsh_dir_stat.stat.exists
+
+- name: Configuring oh-my-zsh settings and plugins
+  ansible.builtin.include_tasks: ohmyzsh.yml
+  when: "'zsh' in pimp_my_shell_components"
+
+- name: Console setup for Debian-family distributions
+  ansible.builtin.include_tasks: console-setup.yml
+  when:
+    - "'console_setup' in pimp_my_shell_components"
+    - ansible_facts['os_family'] == 'Debian'
+
+- name: Configuring Custom Tmux
+  ansible.builtin.include_tasks: ohmytmux.yml
+  when: "'tmux' in pimp_my_shell_components"
+
+- name: Configuring Additional CLI tools
+  ansible.builtin.include_tasks: cli-tools.yml
+  when: "'cli_tools' in pimp_my_shell_components"
+
+- name: Configuring Vim
+  ansible.builtin.include_tasks: vim.yml
+  when: "'vim' in pimp_my_shell_components"
+
+- name: Copy BashRC
+  ansible.builtin.copy:
+    src: "{{ role_path }}/files/.bashrc"
+    dest: "{{ ansible_facts['env']['HOME'] }}/.bashrc"
+    owner: "{{ ansible_facts['user_id'] }}"
+    group: "{{ ansible_facts['user_gid'] }}"
+    mode: "0644"
+  when: "'bashrc' in pimp_my_shell_components"
+
+# ── Terminal profiles per OS ──────────────────────────────────────────────
+- name: Configuring Parrot Terminal profiles
+  ansible.builtin.include_tasks: terminal-profiles-parrot.yml
+  when:
+    - "'terminal_profiles' in pimp_my_shell_components"
+    - ansible_facts['distribution'] == 'Parrot'
+
+- name: Configuring Kali Terminal profiles
+  ansible.builtin.include_tasks: terminal-profiles-kali.yml
+  when:
+    - "'terminal_profiles' in pimp_my_shell_components"
+    - ansible_facts['distribution'] == 'Kali'
+
+- name: Configuring Ubuntu/Debian/Mint Terminal profiles
+  ansible.builtin.include_tasks: terminal-profiles-ubuntu.yml
+  when:
+    - "'terminal_profiles' in pimp_my_shell_components"
+    - ansible_facts['distribution'] in ['Ubuntu', 'Debian', 'Linux Mint']
+
+- name: Configuring macOS Terminal profiles
+  ansible.builtin.include_tasks: terminal-profiles-macos.yml
+  when:
+    - "'terminal_profiles' in pimp_my_shell_components"
+    - ansible_facts['distribution'] == 'MacOSX'

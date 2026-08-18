@@ -1,0 +1,13 @@
+# code: language=ansible
+---
+- name: Ensure XFCE terminal profiles directory exists
+  ansible.builtin.file:
+    path: "{{ ansible_facts['env']['HOME'] }}/.config/xfce4/terminal"
+    state: directory
+    mode: "0755"
+
+- name: Deploy custom XFCE terminal profile
+  ansible.builtin.copy:
+    src: "{{ role_path }}/files/{{ 'xfce-terminal-profile-dark-theme' if dark_mode | default(false) else 'xfce-terminal-profile-light-theme' }}"
+    dest: "{{ ansible_facts['env']['HOME'] }}/.config/xfce4/terminal/terminalrc"
+    mode: "0644"

@@ -1,0 +1,12 @@
+[/]
+visible-name='Default'
+use-system-font=false
+font='MesloLGS NF 12'
+use-theme-colors=false
+foreground-color='#A4B1CD'
+background-color='#141C2B'
+bold-color='#C5D1EB'
+bold-color-same-as-fg=false
+palette=['#F3F3F3', '#FF3E3E', '#9FEF00', '#FFAF00', '#2E6CFF', '#9F00FF', '#2EE7B6', '#EEEEEC', '#F3F3F3', '#FF8484', '#C5F467', '#FFCC5C', '#5CB2FF', '#CF8DFB', '#5CECC6', '#EEEEEC']
+scrollback-unlimited=true
+audible-bell=false

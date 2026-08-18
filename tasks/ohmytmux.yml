@@ -1,0 +1,36 @@
+# code: language=ansible
+---
+- name: Installing Oh my tmux!
+  ansible.builtin.git:  # noqa: latest[git] — intentionally tracks upstream default branch
+    repo: https://github.com/gpakosz/.tmux
+    dest: "{{ ansible_facts['env']['HOME'] }}/.tmux"
+    update: false
+
+- name: Symlink ~/.tmux.conf to ~/.tmux/.tmux.conf
+  ansible.builtin.file:
+    src: "{{ ansible_facts['env']['HOME'] }}/.tmux/.tmux.conf"
+    dest: "{{ ansible_facts['env']['HOME'] }}/.tmux.conf"
+    state: link
+    force: true
+
+- name: Copy .tmux.conf.local file
+  ansible.builtin.copy:
+    src: "{{ role_path }}/files/tmux/tmux.conf.local"
+    dest: "{{ ansible_facts['env']['HOME'] }}/.tmux.conf.local"
+    owner: "{{ ansible_facts['user_id'] }}"
+    group: "{{ ansible_facts['user_gid'] }}"
+    mode: "0644"
+
+- name: Installing Tmux Plugin Manager (TPM)
+  ansible.builtin.git:  # noqa: latest[git] — intentionally tracks upstream default branch
+    repo: https://github.com/tmux-plugins/tpm
+    dest: "{{ ansible_facts['env']['HOME'] }}/.tmux/plugins/tpm"
+    update: false
+
+# tmux-sensible is the first plugin listed in tmux.conf.local, so its
+# presence means install_plugins already ran successfully.
+- name: Run Tmux TPM post install script
+  ansible.builtin.shell: "{{ ansible_facts['env']['HOME'] }}/.tmux/plugins/tpm/bin/install_plugins"
+  args:
+    executable: /bin/bash
+    creates: "{{ ansible_facts['env']['HOME'] }}/.tmux/plugins/tmux-sensible"

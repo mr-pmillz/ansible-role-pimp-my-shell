@@ -1,0 +1,74 @@
+# code: language=ansible
+---
+- name: Read current mate terminal profiles
+  community.general.dconf:
+    key: /org/mate/terminal/global/profile-list
+    state: read
+  register: profile_list
+
+- name: Profile_list was not set, setting
+  ansible.builtin.set_fact:
+    profile_list:
+      value: '["default"]'
+  when: profile_list.value is none
+
+- name: Adding our profile
+  ansible.builtin.set_fact:
+    new_profile_list: "{{ profile_list.value | regex_replace(']$', \", 'video']\") }}"
+
+- name: Writing updated profile list
+  community.general.dconf:
+    key: /org/mate/terminal/global/profile-list
+    value: "{{ new_profile_list }}"
+  when: "'video' not in profile_list.value"
+
+- name: Copy dconf-dump-video profile
+  ansible.builtin.copy:
+    src: "{{ role_path }}/files/dconf-dump-video"
+    dest: "/tmp/dconf-dump-video"
+    owner: "{{ ansible_facts['user_id'] }}"
+    group: "{{ ansible_facts['user_gid'] }}"
+    mode: "0644"
+
+- name: Start Xvfb
+  ansible.builtin.shell: Xvfb :99 -ac &
+  async: 10
+  poll: 0
+  changed_when: false
+  when: >
+    lookup('env', 'MOLECULE_FILE') is defined or
+    lookup('env', 'GITHUB_ACTIONS') | default(false) | bool
+
+- name: Restoring Video Profile from Dump
+  ansible.builtin.shell:
+    cmd: dbus-run-session -- dconf load /org/mate/terminal/profiles/video/ < /tmp/dconf-dump-video
+  environment:
+    DISPLAY: ':99'
+  changed_when: true
+  when: "'video' not in profile_list.value"
+
+- name: Adding our report profile
+  ansible.builtin.set_fact:
+    new_profile_list: "{{ profile_list.value | regex_replace(']$', \", 'report']\") }}"
+
+- name: Writing second updated profile list
+  community.general.dconf:
+    key: /org/mate/terminal/global/profile-list
+    value: "{{ new_profile_list }}"
+  when: "'report' not in profile_list.value"
+
+- name: Copy dconf-report profile
+  ansible.builtin.copy:
+    src: "{{ role_path }}/files/dconf-report"
+    dest: "/tmp/dconf-report"
+    owner: "{{ ansible_facts['user_id'] }}"
+    group: "{{ ansible_facts['user_gid'] }}"
+    mode: "0644"
+
+- name: Restoring Report Profile from Dump
+  ansible.builtin.shell:
+    cmd: dbus-run-session -- dconf load /org/mate/terminal/profiles/report/ < /tmp/dconf-report
+  environment:
+    DISPLAY: ':99'
+  changed_when: true
+  when: "'report' not in profile_list.value"

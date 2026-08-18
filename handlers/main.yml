@@ -1,0 +1,7 @@
+# code: language=ansible
+---
+# handlers file for pimp_my_shell
+- name: Run dpkg-reconfigure console-setup
+  become: true
+  ansible.builtin.command: dpkg-reconfigure -f noninteractive console-setup
+  changed_when: true

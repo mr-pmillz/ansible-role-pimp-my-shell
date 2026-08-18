@@ -1,0 +1,69 @@
+# code: language=ansible
+---
+dependency:
+  name: galaxy
+  options:
+    role-file: requirements.yml
+    requirements-file: requirements.yml
+driver:
+  name: docker
+platforms:
+  - name: ubuntu-pimp-my-shell
+    image: ubuntu:latest
+    privileged: true
+    pre_build_image: false
+    dockerfile: Dockerfile.ubuntu
+    ansible_user: root
+    env:
+      USER: root
+  - name: debian-pimp-my-shell
+    image: debian:stable
+    privileged: true
+    pre_build_image: false
+    dockerfile: Dockerfile.debian
+    ansible_user: root
+    env:
+      USER: root
+  - name: kali-pimp-my-shell
+    image: kalilinux/kali-rolling:latest
+    privileged: true
+    pre_build_image: false
+    dockerfile: Dockerfile.kali
+    ansible_user: root
+    env:
+      USER: root
+  - name: parrot-pimp-my-shell
+    image: parrotsec/core:latest
+    privileged: true
+    pre_build_image: false
+    dockerfile: Dockerfile.parrot
+    ansible_user: root
+    env:
+      USER: root
+  - name: mint-pimp-my-shell
+    image: linuxmintd/mint22-amd64:latest
+    # Only published for amd64, so it is pinned explicitly and needs binfmt/qemu
+    # emulation (`docker run --privileged tonistiigi/binfmt --install amd64`) to run
+    # on an arm64 host. Every other platform here is a multi-arch image and runs natively.
+    platform: linux/amd64
+    privileged: true
+    pre_build_image: false
+    dockerfile: Dockerfile.mint
+    ansible_user: root
+    env:
+      USER: root
+provisioner:
+  name: ansible
+  env:
+    # Molecule used to add ${MOLECULE_PROJECT_DIRECTORY}/. to this
+    # path for us pre-25.2.0, but now we have to do it ourselves. See
+    # ansible/molecule#4380 and
+    # https://github.com/ansible/molecule/releases/tag/v25.2.0 for
+    # more details. Molecule symlinks this role into its cache roles dir
+    # under its galaxy name (mr_pmillz.pimp_my_shell).
+    ANSIBLE_ROLES_PATH: ~/.cache/molecule/ansible-role-pimp-my-shell/${MOLECULE_SCENARIO_NAME}/roles:~/.ansible/roles:/usr/share/ansible/roles:/etc/ansible/roles
+verifier:
+  name: ansible
+scenario:
+  name: default
+role_name_check: 1

@@ -1,0 +1,7 @@
+# code: language=ansible
+---
+roles:
+  - name: gantsign.oh-my-zsh
+
+collections:
+  - name: community.general

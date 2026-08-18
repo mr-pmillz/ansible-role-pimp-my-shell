@@ -1,0 +1,34 @@
+# code: language=ansible
+---
+# Homebrew lives under /opt/homebrew on Apple Silicon (arm64) and
+# /usr/local on Intel (amd64); pimp_my_shell_arch is normalized in main.yml.
+- name: Set Homebrew prefix for detected architecture
+  ansible.builtin.set_fact:
+    pimp_my_shell_homebrew_prefix: "{{ '/opt/homebrew' if pimp_my_shell_arch == 'arm64' else '/usr/local' }}"
+
+- name: Check for Homebrew at the architecture-specific prefix
+  ansible.builtin.stat:
+    path: "{{ pimp_my_shell_homebrew_prefix }}/bin/brew"
+  register: pimp_my_shell_brew_stat
+
+- name: Fail if Homebrew is not installed
+  ansible.builtin.fail:
+    msg: >-
+      Homebrew is required but {{ pimp_my_shell_homebrew_prefix }}/bin/brew
+      was not found. Install it first from https://brew.sh (this role does not
+      install Homebrew itself, since doing so requires an interactive sudo
+      password prompt).
+  when: not pimp_my_shell_brew_stat.stat.exists
+
+- name: Compute prerequisite Homebrew formula list for selected components
+  ansible.builtin.set_fact:
+    pimp_my_shell_packages: >-
+      {{ (['base'] + pimp_my_shell_components)
+         | map('extract', pimp_my_shell_darwin_component_packages)
+         | select('defined') | flatten | unique | sort }}
+
+- name: Install prerequisite Homebrew formulae
+  community.general.homebrew:
+    name: "{{ pimp_my_shell_packages }}"
+    state: present
+    path: "{{ pimp_my_shell_homebrew_prefix }}/bin"

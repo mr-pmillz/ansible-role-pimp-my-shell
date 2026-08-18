@@ -1,0 +1,7 @@
+# code: language=ansible
+---
+- name: Test pimp_my_shell role
+  hosts: localhost
+  connection: local
+  roles:
+    - role: mr_pmillz.pimp_my_shell

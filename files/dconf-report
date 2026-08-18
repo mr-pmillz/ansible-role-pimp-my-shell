@@ -1,0 +1,21 @@
+[/]
+allow-bold=true
+background-color='#E4B0E4B0E4B0'
+background-darkness=1.0
+background-type='transparent'
+bold-color='#214721472147'
+bold-color-same-as-fg=false
+cursor-blink-mode='on'
+default-show-menubar=true
+font='MesloLGS NF 12'
+foreground-color='#317E317E317E'
+login-shell=false
+palette='#000000000000:#9D0200000000:#000086D300F5:#D0357D3400B1:#0000263A8888:#2C6C000074E7:#000084A48F5B:#2D392D392D39:#1A731A731A73:#D03500000000:#0FF7CBF10000:#E8F49A0300C6:#00001238FFFF:#45EF0000D110:#0000CDFBD998:#451E451E451E'
+scrollback-lines=16384
+scrollback-unlimited=true
+scrollbar-position='right'
+silent-bell=true
+title='Parrot Terminal'
+use-system-font=true
+use-theme-colors=false
+visible-name='Default'

@@ -1,0 +1,82 @@
+# code: language=ansible
+---
+# Whether this role installs its own prerequisite packages (apt on
+# Debian-family distros, Homebrew on macOS). Set to false if another
+# role or process already provides zsh/git/tmux/vim/bat/etc.
+install_prerequisites: true
+
+# Users that the gantsign.oh-my-zsh dependency configures on Linux.
+# Each entry follows the gantsign.oh-my-zsh `users` format.
+oh_my_zsh_users:
+  - username: "{{ ansible_facts['user_id'] }}"
+
+# Default theme
+oh_my_zsh_theme: powerlevel10k/powerlevel10k
+
+# Default plugins
+oh_my_zsh_plugins:
+  - ansible
+  - git
+  - golang
+  - docker
+  - docker-compose
+  - fzf
+  - tmux
+  - virtualenv
+  - zsh-autosuggestions
+  - zsh-syntax-highlighting
+
+# Whether to install by default for all specified users.
+# May be overridden by `oh_my_zsh_install` under each user.
+oh_my_zsh_install: true
+
+# Default update mode for Oh-My-Zsh
+# accepted values are:
+# disabled (default)
+# auto
+# reminder
+oh_my_zsh_update_mode: reminder
+
+# Default update frequency in days. When the update mode is set to a value other
+# than "disabled", this is the frequency (in days) to check for a new version.
+# The value 0 will check every time a new shell session starts.
+oh_my_zsh_update_frequency: 7
+
+# Whether to write the ~/.zshrc file
+# May be overridden by `oh_my_zsh: write_zshrc:` under each user.
+oh_my_zsh_write_zshrc: true
+
+# default dark_mode to false
+dark_mode: false
+
+# ── Selective installation ────────────────────────────────────────────────
+# By default this role configures everything it knows about. Setting any
+# only_* flag below narrows the run to just the flags you set; everything
+# else is skipped.
+#
+#   ansible-playbook main.yml -e only_vim=true
+#   ansible-playbook main.yml -e only_vim=true -e only_tmux=true
+#
+# Multiple flags union — the second example installs the vim *and* tmux
+# customizations and nothing else. With no flag set, all of them run.
+#
+# Note these are independent: only_vim does not pull in only_nerdfonts, even
+# though the vim (and zsh powerlevel10k) configs render glyphs that need a
+# Nerd Font installed. Add only_nerdfonts: true if you want the glyphs too.
+
+# MesloLGS Nerd Fonts (nerdfonts.yml)
+only_nerdfonts: false
+# oh-my-zsh plugins, powerlevel10k, aliases, ~/.zshrc (ohmyzsh.yml)
+only_zsh: false
+# UTF-8 boot console charmap (console-setup.yml)
+only_console_setup: false
+# oh-my-tmux, TPM plugins, ~/.tmux.conf.local (ohmytmux.yml)
+only_tmux: false
+# bat config and fzf (cli-tools.yml)
+only_cli_tools: false
+# awesome-vimrc, vim plugins, ~/.vimrc, my_configs.vim (vim.yml)
+only_vim: false
+# ~/.bashrc
+only_bashrc: false
+# XFCE/MATE/GNOME/Terminal.app profiles (terminal-profiles-*.yml)
+only_terminal_profiles: false

@@ -1,0 +1,78 @@
+# code: language=ansible
+---
+- name: Check if gnome-terminal is installed
+  ansible.builtin.command: which gnome-terminal
+  register: gnome_terminal_check
+  changed_when: false
+  failed_when: false
+
+- name: Skip GNOME Terminal configuration if not installed
+  ansible.builtin.debug:
+    msg: "gnome-terminal is not installed, skipping profile configuration"
+  when: gnome_terminal_check.rc != 0
+
+- name: Configure GNOME Terminal profile
+  when: gnome_terminal_check.rc == 0
+  block:
+    - name: Set GNOME Terminal profile UUID
+      ansible.builtin.set_fact:
+        gnome_terminal_profile_uuid: "b1dcc9dd-5262-4d8d-a863-c897e6d979b9"
+
+    - name: Read current GNOME Terminal profile list
+      community.general.dconf:
+        key: /org/gnome/terminal/legacy/profiles:/list
+        state: read
+      register: gnome_profile_list
+
+    - name: Set default profile list if not set
+      ansible.builtin.set_fact:
+        gnome_profile_list:
+          value: "['{{ gnome_terminal_profile_uuid }}']"
+      when: gnome_profile_list.value is none
+
+    - name: Add profile UUID to list if not present
+      ansible.builtin.set_fact:
+        gnome_new_profile_list: "{{ gnome_profile_list.value | regex_replace(']$', \", '\" + gnome_terminal_profile_uuid + \"']\") }}"
+      when: gnome_terminal_profile_uuid not in gnome_profile_list.value
+
+    - name: Writing updated GNOME Terminal profile list
+      community.general.dconf:
+        key: /org/gnome/terminal/legacy/profiles:/list
+        value: "{{ gnome_new_profile_list }}"
+      when: gnome_terminal_profile_uuid not in gnome_profile_list.value
+
+    - name: Select dconf profile file based on dark_mode
+      ansible.builtin.set_fact:
+        gnome_terminal_dconf_file: "{{ 'dconf-gnome-terminal-default' if dark_mode | default(false) else 'dconf-gnome-terminal-light' }}"
+
+    - name: Copy selected GNOME Terminal dconf profile to /tmp
+      ansible.builtin.copy:
+        src: "{{ role_path }}/files/{{ gnome_terminal_dconf_file }}"
+        dest: "/tmp/{{ gnome_terminal_dconf_file }}"
+        owner: "{{ ansible_facts['user_id'] }}"
+        group: "{{ ansible_facts['user_gid'] }}"
+        mode: "0644"
+
+    - name: Start Xvfb
+      ansible.builtin.shell: Xvfb :99 -ac &
+      async: 10
+      poll: 0
+      changed_when: false
+      when: >
+        lookup('env', 'MOLECULE_FILE') is defined or
+        lookup('env', 'GITHUB_ACTIONS') | default(false) | bool
+
+    - name: Load GNOME Terminal profile from dconf dump
+      ansible.builtin.shell:
+        cmd: >
+          dbus-run-session -- dconf load
+          /org/gnome/terminal/legacy/profiles:/:{{ gnome_terminal_profile_uuid }}/
+          < /tmp/{{ gnome_terminal_dconf_file }}
+      environment:
+        DISPLAY: ':99'
+      changed_when: true
+
+    - name: Set profile as default
+      community.general.dconf:
+        key: /org/gnome/terminal/legacy/profiles:/default
+        value: "'{{ gnome_terminal_profile_uuid }}'"

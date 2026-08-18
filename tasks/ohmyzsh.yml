@@ -1,0 +1,35 @@
+# code: language=ansible
+---
+- name: Installing custom zsh plugins
+  ansible.builtin.git:  # noqa: latest[git] — intentionally tracks upstream default branch
+    repo: "{{ item.repo }}"
+    dest: "{{ item.location }}"
+    depth: "{{ item.depth | default(omit) }}"
+  loop:
+    - { repo: https://github.com/zsh-users/zsh-autosuggestions, location: "{{ ansible_facts['env']['HOME'] }}/.oh-my-zsh/custom/plugins/zsh-autosuggestions" }
+    - { repo: https://github.com/zsh-users/zsh-syntax-highlighting, location: "{{ ansible_facts['env']['HOME'] }}/.oh-my-zsh/custom/plugins/zsh-syntax-highlighting" }
+    - { repo: https://github.com/romkatv/powerlevel10k, location: "{{ ansible_facts['env']['HOME'] }}/.oh-my-zsh/custom/themes/powerlevel10k", depth: 1 }
+
+- name: Copying oh-my-zsh configuration files
+  ansible.builtin.copy:
+    src: "{{ item.src }}"
+    dest: "{{ item.dest }}"
+    owner: "{{ ansible_facts['user_id'] }}"
+    group: "{{ ansible_facts['user_gid'] }}"
+    mode: "0644"
+  loop:
+    - src: "{{ role_path }}/files/zsh/.p10k.zsh"
+      dest: "{{ ansible_facts['env']['HOME'] }}/.p10k.zsh"
+    - src: "{{ role_path }}/files/zsh/aliases.zsh"
+      dest: "{{ ansible_facts['env']['HOME'] }}/.oh-my-zsh/custom/aliases.zsh"
+    - src: "{{ role_path }}/files/zsh/man-pages.zsh"
+      dest: "{{ ansible_facts['env']['HOME'] }}/.oh-my-zsh/custom/man-pages.zsh"
+
+- name: Update .zshrc configuration
+  vars:
+    prepend_data: "{{ lookup('ansible.builtin.file', role_path + '/files/zsh/zshrc_prepend.zsh') }}"
+    append_data: "{{ lookup('ansible.builtin.file', role_path + '/files/zsh/zshrc_append.zsh') }}"
+  ansible.builtin.template:
+    src: templates/zshrc.j2
+    dest: "{{ ansible_facts['env']['HOME'] }}/.zshrc"
+    mode: "0644"

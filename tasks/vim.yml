@@ -1,0 +1,127 @@
+# code: language=ansible
+---
+- name: Cloning awesome Vimrc
+  ansible.builtin.git:  # noqa: latest[git] — intentionally tracks upstream default branch
+    repo: https://github.com/amix/vimrc
+    dest: "{{ ansible_facts['env']['HOME'] }}/.vim_runtime"
+    depth: 1
+    update: false
+
+- name: Check if install_awesome_vimrc.sh has been run
+  ansible.builtin.stat:
+    path: "{{ ansible_facts['env']['HOME'] }}/vim_awesome_is_installed.txt"
+  register: vim_awesome_is_installed
+
+- name: Run install_awesome_vimrc.sh
+  ansible.builtin.shell: |
+    sh {{ ansible_facts['env']['HOME'] }}/.vim_runtime/install_awesome_vimrc.sh
+  changed_when: true
+  when: not vim_awesome_is_installed.stat.exists
+
+- name: Create vim awesome exists flag file
+  ansible.builtin.file:
+    path: "{{ ansible_facts['env']['HOME'] }}/vim_awesome_is_installed.txt"
+    state: touch
+    mode: "0644"
+  when: not vim_awesome_is_installed.stat.exists
+
+- name: Installing vim plugins
+  ansible.builtin.git:  # noqa: latest[git] — intentionally tracks upstream default branch
+    repo: "{{ item.repo }}"
+    dest: "{{ item.location }}"
+    depth: "{{ item.depth | default(omit) }}"
+    update: false
+  loop:
+    - { repo: https://github.com/ycm-core/YouCompleteMe, location: "{{ ansible_facts['env']['HOME'] }}/.vim_runtime/my_plugins/YouCompleteMe" }
+    - { repo: https://github.com/stephpy/vim-yaml, location: "{{ ansible_facts['env']['HOME'] }}/.vim_runtime/my_plugins/vim-yaml" }
+    - { repo: https://github.com/fatih/vim-go, location: "{{ ansible_facts['env']['HOME'] }}/.vim_runtime/my_plugins/vim-go" }
+    - { repo: https://github.com/luochen1990/rainbow, location: "{{ ansible_facts['env']['HOME'] }}/.vim_runtime/my_plugins/rainbow" }
+    - { repo: https://github.com/junegunn/fzf.vim, location: "{{ ansible_facts['env']['HOME'] }}/.vim_runtime/my_plugins/fzf.vim" }
+    - { repo: https://github.com/Xuyuanp/nerdtree-git-plugin, location: "{{ ansible_facts['env']['HOME'] }}/.vim_runtime/my_plugins/nerdtree-git-plugin" }
+    - { repo: https://github.com/ryanoasis/vim-devicons, location: "{{ ansible_facts['env']['HOME'] }}/.vim_runtime/my_plugins/vim-devicons" }
+    - { repo: https://github.com/mengelbrecht/lightline-bufferline, location: "{{ ansible_facts['env']['HOME'] }}/.vim_runtime/my_plugins/lightline-bufferline" }
+    - { repo: https://github.com/mg979/vim-visual-multi, location: "{{ ansible_facts['env']['HOME'] }}/.vim_runtime/my_plugins/vim-visual-multi" }
+    - { repo: https://github.com/ConradIrwin/vim-bracketed-paste, location: "{{ ansible_facts['env']['HOME'] }}/.vim_runtime/my_plugins/vim-bracketed-paste" }
+    - { repo: https://github.com/vim-airline/vim-airline, location: "{{ ansible_facts['env']['HOME'] }}/.vim_runtime/my_plugins/vim-airline" }
+    - { repo: https://github.com/vim-airline/vim-airline-themes, location: "{{ ansible_facts['env']['HOME'] }}/.vim_runtime/my_plugins/vim-airline-themes" }
+
+- name: Copying vim configuration files
+  ansible.builtin.copy:
+    src: "{{ item.src }}"
+    dest: "{{ item.dest }}"
+    owner: "{{ ansible_facts['user_id'] }}"
+    group: "{{ ansible_facts['user_gid'] }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - src: "{{ role_path }}/files/vim/.vimrc"
+      dest: "{{ ansible_facts['env']['HOME'] }}/.vimrc"
+      mode: "0644"
+    - src: "{{ role_path }}/files/vim/update.sh"
+      dest: "{{ ansible_facts['env']['HOME'] }}/.vim_runtime/my_plugins/update.sh"
+      mode: "0755"
+
+- name: Copy Vim my_configs.vim template
+  ansible.builtin.template:
+    src: "{{ role_path }}/templates/my_configs.vim.j2"
+    dest: "{{ ansible_facts['env']['HOME'] }}/.vim_runtime/my_configs.vim"
+    owner: "{{ ansible_facts['user_id'] }}"
+    group: "{{ ansible_facts['user_gid'] }}"
+    mode: "0644"
+
+# YouCompleteMe compiles its native components on the host, so amd64 and
+# arm64 are both handled by the local toolchain. --all pulls in every
+# completer it can build; missing optional toolchains are tolerated.
+- name: Check if YouCompleteMe install.py has been run
+  ansible.builtin.stat:
+    path: "{{ ansible_facts['env']['HOME'] }}/vim_you_complete_me_is_installed.txt"
+  register: vim_you_complete_me_is_installed
+
+- name: Install YouCompleteMe
+  ansible.builtin.shell: |
+    cd {{ ansible_facts['env']['HOME'] }}/.vim_runtime/my_plugins/YouCompleteMe
+    git submodule update --init --recursive
+    python3 install.py --all || true
+  changed_when: true
+  when: not vim_you_complete_me_is_installed.stat.exists
+
+- name: Create YouCompleteMe installed flag file
+  ansible.builtin.file:
+    path: "{{ ansible_facts['env']['HOME'] }}/vim_you_complete_me_is_installed.txt"
+    state: touch
+    mode: "0644"
+  when: not vim_you_complete_me_is_installed.stat.exists
+
+# vim-go binaries are only installable when a Go toolchain is present.
+# Go is optional for this role: without it, this step is skipped cleanly.
+- name: Check if a Go toolchain is available
+  ansible.builtin.shell: command -v go
+  args:
+    executable: /bin/bash
+  environment:
+    PATH: "{{ ansible_facts['env']['PATH'] }}:/usr/local/go/bin:{{ ansible_facts['env']['HOME'] }}/go/bin:/opt/homebrew/bin:/usr/local/bin"
+  register: go_toolchain_check
+  changed_when: false
+  failed_when: false
+
+- name: Check if vim-go binaries were installed
+  ansible.builtin.stat:
+    path: "{{ ansible_facts['env']['HOME'] }}/vim_go_is_installed.txt"
+  register: vim_go_is_installed
+
+- name: Install vim-go binaries
+  ansible.builtin.shell: vim +GoInstallBinaries +qa || true
+  environment:
+    PATH: "{{ ansible_facts['env']['PATH'] }}:/usr/local/go/bin:{{ ansible_facts['env']['HOME'] }}/go/bin:/opt/homebrew/bin:/usr/local/bin"
+  changed_when: true
+  when:
+    - go_toolchain_check.rc == 0
+    - not vim_go_is_installed.stat.exists
+
+- name: Create vim-go installed flag file
+  ansible.builtin.file:
+    path: "{{ ansible_facts['env']['HOME'] }}/vim_go_is_installed.txt"
+    state: touch
+    mode: "0644"
+  when:
+    - go_toolchain_check.rc == 0
+    - not vim_go_is_installed.stat.exists

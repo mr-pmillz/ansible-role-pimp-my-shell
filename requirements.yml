@@ -1,0 +1,13 @@
+# code: language=ansible
+---
+# Install with:
+#   ansible-galaxy install -r requirements.yml
+roles:
+  # Installs oh-my-zsh (and the zsh package) on Linux; declared as a
+  # dependency in meta/main.yml so it runs automatically before this role.
+  - name: gantsign.oh-my-zsh
+
+collections:
+  # Provides community.general.dconf, community.general.homebrew, and
+  # community.general.osx_defaults.
+  - name: community.general
