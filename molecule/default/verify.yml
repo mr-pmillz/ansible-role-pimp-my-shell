@@ -3,9 +3,20 @@
 - name: Verify both editors and Tree-sitter highlighting
   hosts: all
   gather_facts: true
+  vars_files:
+    - ../../defaults/main.yml
   environment:
     PATH: "{{ ansible_facts['env']['HOME'] }}/.local/bin:{{ ansible_facts['env']['HOME'] }}/.cargo/bin:{{ ansible_facts['env']['PATH'] }}"
   tasks:
+    - name: Check the provisioned Go toolchain
+      ansible.builtin.command: go version
+      environment:
+        GOTOOLCHAIN: local
+        GOENV: "off"
+      register: go_verify
+      changed_when: false
+      failed_when: go_verify.rc != 0 or ('go version go' + go_version + ' ') not in go_verify.stdout
+
     - name: Verify Vim is still installed
       ansible.builtin.command: vim --version
       changed_when: false
@@ -53,3 +64,22 @@
       register: highlight_verify
       changed_when: false
       failed_when: highlight_verify.rc != 0 or 'HIGHLIGHT_CHANGED=1' in highlight_verify.stdout
+
+    - name: Install fuzzy picker regression checks
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../../tests/pickers.lua"
+        dest: /tmp/pimp-my-shell-pickers-verify.lua
+        mode: "0644"
+
+    - name: Verify fuzzy file and text search with the installed configuration
+      ansible.builtin.command:
+        argv:
+          - nvim
+          - --headless
+          - -i
+          - NONE
+          - -c
+          - luafile /tmp/pimp-my-shell-pickers-verify.lua
+      environment:
+        NVIM_HIGHLIGHT_SETUP: "1"
+      changed_when: false

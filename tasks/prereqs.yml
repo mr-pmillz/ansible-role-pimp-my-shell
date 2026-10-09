@@ -7,3 +7,11 @@
 - name: Install prerequisite packages (macOS)
   ansible.builtin.include_tasks: prereqs-macos.yml
   when: ansible_facts['os_family'] == 'Darwin'
+
+- name: Install Go for the selected editors
+  ansible.builtin.include_tasks: go.yml
+  when: "'vim' in pimp_my_shell_components or 'neovim' in pimp_my_shell_components"
+
+- name: Install a compatible fuzzy finder for Neovim
+  ansible.builtin.include_tasks: neovim-fzf.yml
+  when: "'neovim' in pimp_my_shell_components"

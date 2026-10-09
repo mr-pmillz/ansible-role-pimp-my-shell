@@ -6,6 +6,7 @@ exclude_paths:
   - .github/
   - .cache/
   - .ansible/
+  - .venv/
 
 skip_list:
   # The public variable API deliberately keeps short names (only_vim,

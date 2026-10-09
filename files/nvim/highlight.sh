@@ -4,16 +4,19 @@ set -euo pipefail
 
 if [[ ${1:-} == --help ]]; then
   cat <<'HELP'
-Usage: /path/to/nvim/highlight.sh
+Usage: /path/to/nvim/highlight.sh [--upgrade]
 Run from any directory. Installs Rust/Cargo if missing and builds tree-sitter-cli
 with Cargo when necessary. Neovim >= 0.12, git, curl, tar, a C/C++ compiler, and
 Node.js must already be available (the Ansible role installs these prerequisites).
+
+--upgrade updates Rust's stable toolchain, Lazy plugins, and an older Tree-sitter
+CLI to TREE_SITTER_VERSION, then synchronizes all selected parser revisions.
 
 Optional environment:
   TREESITTER_LANGUAGES   Comma-separated upstream languages (default: all)
   TREESITTER_JOBS        Maximum concurrent parser builds (default: 4)
   TREESITTER_TIMEOUT     Seconds allowed per installation phase (default: 3600)
-  TREE_SITTER_VERSION   Cargo version to install if CLI is missing/old (default: 0.27.1)
+  TREE_SITTER_VERSION   CLI version for installs/upgrades (default: 0.27.1)
   NVIM_BIN              Neovim executable (default: nvim)
 
 The five Go-template dialects and their base languages are always included.
@@ -22,7 +25,29 @@ revisions. Unsupported upstream languages (tier 4) are excluded by nvim-treesitt
 HELP
   exit 0
 fi
-[[ $# == 0 ]] || { echo "Unknown argument; use --help" >&2; exit 2; }
+export NVIM_HIGHLIGHT_UPGRADE=0
+if [[ $# == 1 && $1 == --upgrade ]]; then
+  NVIM_HIGHLIGHT_UPGRADE=1
+elif [[ $# != 0 ]]; then
+  echo "Unknown argument; use --help" >&2
+  exit 2
+fi
+
+version_at_least() {
+  local major minor patch required_major required_minor required_patch
+  IFS=. read -r major minor patch <<< "$1"
+  IFS=. read -r required_major required_minor required_patch <<< "$2"
+  (( 10#$major > 10#$required_major ||
+    (10#$major == 10#$required_major && 10#$minor > 10#$required_minor) ||
+    (10#$major == 10#$required_major && 10#$minor == 10#$required_minor && 10#$patch >= 10#$required_patch) ))
+}
+
+tree_sitter_version=${TREE_SITTER_VERSION:-0.27.1}
+if ! [[ $tree_sitter_version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] ||
+  ! version_at_least "$tree_sitter_version" 0.26.1; then
+  echo 'TREE_SITTER_VERSION must be an exact stable version >= 0.26.1.' >&2
+  exit 2
+fi
 
 config_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
 export PATH="${CARGO_HOME:-$HOME/.cargo}/bin:$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
@@ -41,7 +66,8 @@ done
   exit 1
 }
 
-if ! cargo --version >/dev/null 2>&1 || ! rustc --version >/dev/null 2>&1; then
+if ! cargo --version >/dev/null 2>&1 || ! rustc --version >/dev/null 2>&1 ||
+  { [[ $NVIM_HIGHLIGHT_UPGRADE == 1 ]] && ! command -v rustup >/dev/null; }; then
   installer=$(mktemp)
   trap 'rm -f "$installer"' EXIT
   curl --proto '=https' --tlsv1.2 -fsSL https://sh.rustup.rs -o "$installer"
@@ -51,10 +77,27 @@ if ! cargo --version >/dev/null 2>&1 || ! rustc --version >/dev/null 2>&1; then
   echo HIGHLIGHT_CHANGED=1
 fi
 
+cargo_command=(cargo)
+if [[ $NVIM_HIGHLIGHT_UPGRADE == 1 ]]; then
+  rust_before=$(rustup run stable rustc --version 2>/dev/null || true)
+  rustup_before=$(rustup --version)
+  rustup update stable
+  if [[ $rust_before != "$(rustup run stable rustc --version)" || $rustup_before != "$(rustup --version)" ]]; then
+    echo HIGHLIGHT_CHANGED=1
+  fi
+  # A caller's pinned/nightly default toolchain is preserved; build this CLI
+  # with the stable toolchain that was just updated.
+  cargo_command+=(+stable)
+fi
+
+required_cli_version=0.26.1
+if [[ $NVIM_HIGHLIGHT_UPGRADE == 1 ]]; then
+  required_cli_version=$tree_sitter_version
+fi
 cli_version=$(tree-sitter --version 2>/dev/null || true)
-if ! [[ $cli_version =~ ^tree-sitter\ ([0-9]+)\.([0-9]+)\.([0-9]+) ]] ||
-  ! (( BASH_REMATCH[1] > 0 || BASH_REMATCH[2] > 26 || (BASH_REMATCH[2] == 26 && BASH_REMATCH[3] >= 1) )); then
-  cargo install --locked tree-sitter-cli --version "${TREE_SITTER_VERSION:-0.27.1}"
+if ! [[ $cli_version =~ ^tree-sitter\ ([0-9]+\.[0-9]+\.[0-9]+)($|[[:space:]]) ]] ||
+  ! version_at_least "${BASH_REMATCH[1]}" "$required_cli_version"; then
+  "${cargo_command[@]}" install --locked tree-sitter-cli --version "$tree_sitter_version"
   echo HIGHLIGHT_CHANGED=1
 fi
 

@@ -5,7 +5,8 @@
     repo: https://github.com/amix/vimrc
     dest: "{{ ansible_facts['env']['HOME'] }}/.vim_runtime"
     depth: 1
-    update: false
+    update: "{{ upgrade_components | bool }}"
+  register: pimp_my_shell_vim_source
 
 - name: Check if install_awesome_vimrc.sh has been run
   ansible.builtin.stat:
@@ -16,7 +17,7 @@
   ansible.builtin.shell: |
     sh {{ ansible_facts['env']['HOME'] }}/.vim_runtime/install_awesome_vimrc.sh
   changed_when: true
-  when: not vim_awesome_is_installed.stat.exists
+  when: not vim_awesome_is_installed.stat.exists or pimp_my_shell_vim_source is changed
 
 - name: Create vim awesome exists flag file
   ansible.builtin.file:
@@ -30,7 +31,8 @@
     repo: "{{ item.repo }}"
     dest: "{{ item.location }}"
     depth: "{{ item.depth | default(omit) }}"
-    update: false
+    update: "{{ upgrade_components | bool }}"
+  register: pimp_my_shell_vim_plugins
   loop:
     - { repo: https://github.com/ycm-core/YouCompleteMe, location: "{{ ansible_facts['env']['HOME'] }}/.vim_runtime/my_plugins/YouCompleteMe" }
     - { repo: https://github.com/stephpy/vim-yaml, location: "{{ ansible_facts['env']['HOME'] }}/.vim_runtime/my_plugins/vim-yaml" }
@@ -81,8 +83,14 @@
     cd {{ ansible_facts['env']['HOME'] }}/.vim_runtime/my_plugins/YouCompleteMe
     git submodule update --init --recursive
     python3 install.py --all || true
+  environment:
+    PATH: "{{ ansible_facts['env']['HOME'] }}/.local/bin:{{ ansible_facts['env']['PATH'] }}:/usr/local/go/bin:/opt/homebrew/bin:/usr/local/bin"
   changed_when: true
-  when: not vim_you_complete_me_is_installed.stat.exists
+  when: >-
+    not vim_you_complete_me_is_installed.stat.exists or
+    pimp_my_shell_vim_plugins.results
+    | selectattr('item.repo', 'equalto', 'https://github.com/ycm-core/YouCompleteMe')
+    | selectattr('changed') | list | length > 0
 
 - name: Create YouCompleteMe installed flag file
   ansible.builtin.file:
@@ -92,13 +100,13 @@
   when: not vim_you_complete_me_is_installed.stat.exists
 
 # vim-go binaries are only installable when a Go toolchain is present.
-# Go is optional for this role: without it, this step is skipped cleanly.
+# With install_prerequisites disabled, a missing Go toolchain skips this step.
 - name: Check if a Go toolchain is available
   ansible.builtin.shell: command -v go
   args:
     executable: /bin/bash
   environment:
-    PATH: "{{ ansible_facts['env']['PATH'] }}:/usr/local/go/bin:{{ ansible_facts['env']['HOME'] }}/go/bin:/opt/homebrew/bin:/usr/local/bin"
+    PATH: "{{ ansible_facts['env']['HOME'] }}/.local/bin:{{ ansible_facts['env']['PATH'] }}:/usr/local/go/bin:{{ ansible_facts['env']['HOME'] }}/go/bin:/opt/homebrew/bin:/usr/local/bin"
   register: go_toolchain_check
   changed_when: false
   failed_when: false
@@ -109,13 +117,17 @@
   register: vim_go_is_installed
 
 - name: Install vim-go binaries
-  ansible.builtin.shell: vim +GoInstallBinaries +qa || true
+  ansible.builtin.shell: "vim +{{ 'GoUpdateBinaries' if upgrade_components | bool else 'GoInstallBinaries' }} +qa || true"
   environment:
-    PATH: "{{ ansible_facts['env']['PATH'] }}:/usr/local/go/bin:{{ ansible_facts['env']['HOME'] }}/go/bin:/opt/homebrew/bin:/usr/local/bin"
+    PATH: "{{ ansible_facts['env']['HOME'] }}/.local/bin:{{ ansible_facts['env']['PATH'] }}:/usr/local/go/bin:{{ ansible_facts['env']['HOME'] }}/go/bin:/opt/homebrew/bin:/usr/local/bin"
   changed_when: true
   when:
     - go_toolchain_check.rc == 0
-    - not vim_go_is_installed.stat.exists
+    - >-
+      not vim_go_is_installed.stat.exists or
+      pimp_my_shell_vim_plugins.results
+      | selectattr('item.repo', 'equalto', 'https://github.com/fatih/vim-go')
+      | selectattr('changed') | list | length > 0
 
 - name: Create vim-go installed flag file
   ansible.builtin.file:

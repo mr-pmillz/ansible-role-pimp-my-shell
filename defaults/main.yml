@@ -2,8 +2,17 @@
 ---
 # Whether this role installs its own prerequisite packages (apt on
 # Debian-family distros, Homebrew on macOS). Set to false if another
-# role or process already provides zsh/git/tmux/neovim/bat/etc.
+# role or process already provides zsh/git/tmux/neovim/go/bat/etc.
 install_prerequisites: true
+
+# Opt in to upgrading the selected components. Normal reruns install missing
+# dependencies and repair configuration without updating existing tools/plugins.
+upgrade_components: false
+
+# Install Go for either editor when missing; upgrade an older toolchain only
+# with upgrade_components. Releases use checksum-verified upstream archives.
+go_version: "1.27.2"
+go_install_dir: "{{ ansible_facts['env']['HOME'] }}/.local/share/go"
 
 # Users that the gantsign.oh-my-zsh dependency configures on Linux.
 # Each entry follows the gantsign.oh-my-zsh `users` format.
@@ -84,9 +93,13 @@ only_bashrc: false
 only_terminal_profiles: false
 
 # Linux builds this release when the existing Neovim is too old or missing.
-# macOS uses Homebrew. A compatible existing Neovim is reused.
+# Explicit upgrades also replace older compatible releases. macOS uses Homebrew.
 neovim_version: v0.12.6
 neovim_minimum_version: "0.12.0"
+neovim_tree_sitter_version: "0.27.1"
+# Older distro fzf packages reject actions used by the bundled picker config.
+neovim_fzf_version: "0.74.4"
+neovim_fzf_minimum_version: "0.53.0"
 neovim_config_dir: "{{ ansible_facts['env']['XDG_CONFIG_HOME'] | default(ansible_facts['env']['HOME'] + '/.config', true) }}/nvim"
 neovim_prefix: "{{ ansible_facts['env']['HOME'] }}/.local"
 # All languages supported by the installed nvim-treesitter revision.

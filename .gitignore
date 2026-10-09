@@ -4,6 +4,7 @@ __pycache__/
 .cache/
 .ansible/
 .molecule/
+.venv/
 .vscode/
 .idea/
 *.deb

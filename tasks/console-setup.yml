@@ -13,7 +13,7 @@
   become: true
   ansible.builtin.apt:
     name: console-setup
-    state: present
+    state: "{{ 'latest' if upgrade_components | bool else 'present' }}"
   when: console_setup_file.stat.exists
 
 - name: Edit console-setup to utf-8

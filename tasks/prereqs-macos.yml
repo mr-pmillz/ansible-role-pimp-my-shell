@@ -30,5 +30,6 @@
 - name: Install prerequisite Homebrew formulae
   community.general.homebrew:
     name: "{{ pimp_my_shell_packages }}"
-    state: present
+    state: "{{ 'latest' if upgrade_components | bool else 'present' }}"
+    update_homebrew: "{{ upgrade_components | bool }}"
     path: "{{ pimp_my_shell_homebrew_prefix }}/bin"

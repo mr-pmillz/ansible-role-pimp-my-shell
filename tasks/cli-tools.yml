@@ -49,7 +49,8 @@
     repo: https://github.com/junegunn/fzf
     dest: "{{ ansible_facts['env']['HOME'] }}/.fzf"
     depth: 1
-    update: false
+    update: "{{ upgrade_components | bool }}"
+  register: pimp_my_shell_fzf_source
 
 - name: Check if fzf already installed
   ansible.builtin.stat:
@@ -59,7 +60,7 @@
 - name: Install fzf
   ansible.builtin.command: bash {{ ansible_facts['env']['HOME'] }}/.fzf/install --all
   changed_when: true
-  when: not fzf_is_installed.stat.exists
+  when: not fzf_is_installed.stat.exists or pimp_my_shell_fzf_source is changed
 
 - name: Create fzf already installed file
   ansible.builtin.file:

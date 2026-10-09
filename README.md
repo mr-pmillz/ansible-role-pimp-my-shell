@@ -32,9 +32,17 @@ The CPU architecture is detected dynamically from `ansible_facts['architecture']
 - **Linux**: `sudo` privileges (run plays with `-K` or passwordless sudo) — used only to install prerequisite packages and configure the boot console
 - **macOS**: [Homebrew](https://brew.sh) must already be installed (the role refuses to install it because that requires an interactive sudo prompt). Homebrew tasks run as the login user, not root.
 
-Prerequisite packages (zsh, git, curl, tmux, bat, fontconfig, dconf-cli, Node.js, compilers, ripgrep, fd, fzf, …) are installed automatically via **apt** on Linux and **Homebrew** on macOS — and only the packages the selected components actually need. Set `install_prerequisites: false` to skip this if another role already provides them.
+Prerequisite packages (zsh, git, curl, tmux, bat, fontconfig, dconf-cli, Node.js, compilers, ripgrep, fd, …) are installed automatically via **apt** on Linux and **Homebrew** on macOS — and only the packages the selected components actually need. The role also provides compatible Go and fzf releases for the editors. Set `install_prerequisites: false` to skip this if another role already provides them.
 
-Neovim requires **0.12+ with LuaJIT** for the bundled Tree-sitter plugin revision. On Linux, an existing compatible executable is reused; otherwise the role builds the configured release into `~/.local`. Rust/Cargo are installed with rustup if missing, and `tree-sitter-cli` is built with `cargo install --locked` when missing or older than 0.26.1. A Go toolchain is still needed for Go development and Go-based Mason tools.
+Neovim requires **0.12+ with LuaJIT** for the bundled Tree-sitter plugin revision. On Linux, an existing compatible executable is reused; otherwise the role builds the configured release into `~/.local`. Rust/Cargo are installed with rustup if missing, and `tree-sitter-cli` is built with `cargo install --locked` when missing or older than 0.26.1.
+
+Selecting either editor also installs **Go 1.27.2** when Go is missing, for vim-go,
+Go development, and Go-based Mason tools. The role downloads the official archive
+for Linux or macOS on amd64/arm64 and verifies its published SHA-256 checksum.
+Releases live under `~/.local/share/go/<version>` with `go` and `gofmt` symlinks in
+`~/.local/bin`. Ensure that directory comes first on your shell's `PATH`; the
+role's Bash and Zsh configurations already include it. Existing Go installations
+are reused unless `upgrade_components=true` requests an upgrade to `go_version`.
 
 ## Role dependencies
 
@@ -83,7 +91,10 @@ Defaults from `defaults/main.yml`:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `install_prerequisites` | `true` | Install required apt/Homebrew packages before configuring |
+| `install_prerequisites` | `true` | Install required apt/Homebrew packages and compatible editor tools |
+| `upgrade_components` | `false` | Upgrade existing dependencies for the selected components |
+| `go_version` | `1.27.2` | Go release for missing toolchains and explicit editor upgrades |
+| `go_install_dir` | `~/.local/share/go` | Parent directory for versioned Go installations |
 | `dark_mode` | `false` | Dark theme for bat, Vim, and terminal profiles (LazyVim keeps its default theme) |
 | `oh_my_zsh_users` | `[{username: <ansible_user_id>}]` | Users passed to gantsign.oh-my-zsh on Linux |
 | `oh_my_zsh_theme` | `powerlevel10k/powerlevel10k` | zsh theme |
@@ -103,7 +114,7 @@ By default every component runs. Setting any `only_*` flag narrows the run to ju
 | `only_console_setup` | UTF-8 boot console charmap (Linux) |
 | `only_tmux` | oh-my-tmux, TPM plugins, `~/.tmux.conf.local` |
 | `only_cli_tools` | bat config and fzf |
-| `only_neovim` | Neovim, LazyVim, Rust/Cargo, plugins, and Tree-sitter highlighters |
+| `only_neovim` | Neovim, LazyVim, Go, Rust/Cargo, fzf, plugins, and Tree-sitter highlighters |
 | `only_vim` | Existing awesome-vimrc setup, Vim plugins, and `~/.vimrc` |
 | `only_bashrc` | `~/.bashrc` |
 | `only_terminal_profiles` | OS-specific terminal profiles |
@@ -123,6 +134,12 @@ ansible-playbook playbook.yml -K -e only_neovim=true
 
 # Install both editors, without the other optional components.
 ansible-playbook playbook.yml -K -e only_vim=true -e only_neovim=true
+
+# Upgrade Neovim, LazyVim, Go, Rust, fzf, and Tree-sitter.
+ansible-playbook playbook.yml -K -e only_neovim=true -e upgrade_components=true
+
+# Upgrade every component managed by this role.
+ansible-playbook playbook.yml -K -e upgrade_components=true
 
 # Neovim plus Nerd Fonts and tmux (multiple flags form a union).
 ansible-playbook playbook.yml -K -e only_neovim=true -e only_nerdfonts=true -e only_tmux=true
@@ -144,6 +161,27 @@ both, launch `vim` for awesome-vimrc or `nvim` for LazyVim. Your default editor 
 shell command names are not redirected. On Linux the role's existing
 `gantsign.oh-my-zsh` dependency still runs before the selected components.
 
+Fresh installations use the configured Go/Neovim/fzf/Tree-sitter releases, the bundled
+Lazy lockfile, and current upstream branches for the other Git-based tools.
+Use `upgrade_components=true` to update selected apt/Homebrew packages, fonts,
+Git checkouts, TPM plugins, and Lazy plugins. The Neovim component also updates
+Rust's stable toolchain, upgrades older fzf and Tree-sitter executables to the configured
+version, builds the configured Neovim release when needed, and synchronizes parsers.
+Either editor selection upgrades an older Go toolchain to `go_version` when
+prerequisites are enabled. Newer existing Go/Neovim/fzf/Tree-sitter versions are
+retained. Normal reruns reuse compatible tools; plugin changes made through
+`:Lazy` are preserved.
+
+System packages use the versions available in your configured distribution or
+Homebrew repositories; these can lag upstream releases. Mason manages language
+servers, formatters, and debuggers independently. To refresh the controller's
+Galaxy dependencies before an upgrade, run:
+
+```bash
+ansible-galaxy role install -r requirements.yml --force
+ansible-galaxy collection install -r requirements.yml --upgrade
+```
+
 Flags are independent — `only_neovim` does not pull in `only_nerdfonts`, even though the Neovim config renders glyphs that want a Nerd Font. Advanced callers can bypass the flags by passing `pimp_my_shell_components` directly as a role parameter, e.g. `pimp_my_shell_components: [neovim, tmux]`. Vim and Neovim are separate components; a default run installs both.
 
 ## Neovim and highlighting
@@ -158,8 +196,11 @@ are included when no `only_*` flags are set.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `neovim_version` | `v0.12.6` | Linux source release used when Neovim is missing or too old |
+| `neovim_version` | `v0.12.6` | Linux source release for installs and explicit upgrades |
 | `neovim_minimum_version` | `0.12.0` | Minimum accepted Neovim; must support the bundled plugins |
+| `neovim_tree_sitter_version` | `0.27.1` | Tree-sitter CLI release for installs and explicit upgrades |
+| `neovim_fzf_version` | `0.74.4` | Upstream fzf release when missing, incompatible, or explicitly upgraded |
+| `neovim_fzf_minimum_version` | `0.53.0` | Minimum compatible fzf for the bundled fuzzy picker |
 | `neovim_prefix` | `~/.local` | Linux installation prefix |
 | `neovim_config_dir` | `$XDG_CONFIG_HOME/nvim` or `~/.config/nvim` | Destination for the bundled config |
 | `neovim_treesitter_languages` | `[all]` | Upstream parser languages; five custom dialects and their dependencies always install |
@@ -170,13 +211,38 @@ Configuration files are managed with Ansible copy backups; a plugin lockfile is
 seeded only on new installations so later `:Lazy` updates survive role reruns.
 Existing unrelated configuration files are preserved. Remove any existing custom
 colorscheme plugin yourself if migrating another configuration to the default theme.
-`install_prerequisites: false` assumes a compatible Neovim and system build tools
+`install_prerequisites: false` assumes compatible Neovim, Go, fzf, and system build tools
 already exist; the user-local Rust/Cargo and plugin setup still runs.
+
+### File and text search on Mint/Ubuntu
+
+`Space Space` opens the fuzzy file picker; `Space /` searches file contents.
+Both use `fzf-lua`. Some distribution packages are too old for the configured
+picker: fzf 0.44.1, for example, fails with `unknown action: transform`.
+The role installs a checksum-verified upstream fzf into `~/.local/bin` when the
+existing version is below the supported minimum, including with `only_neovim`.
+The Neovim configuration prefers that binary over a distro copy earlier on PATH.
+
+To repair an installation made with an older role checkout, update the checkout
+and rerun your normal command, then restart Neovim:
+
+```bash
+ansible-playbook playbook.yml -K -e only_neovim=true
+```
+
+This compatibility repair does not require the upgrade flag. If search still
+fails, run `:checkhealth fzf-lua` and `:messages` in Neovim. The role also installs
+`rg` and `fd`/`fdfind`; a general health check reporting that fzf exists does not
+establish version compatibility.
+
+### Tree-sitter setup
 
 The role runs the same script you can run locally, from any directory:
 
 ```bash
 ~/.config/nvim/highlight.sh
+# Explicitly upgrade Rust, Lazy plugins, and Tree-sitter, then update parsers:
+~/.config/nvim/highlight.sh --upgrade
 # Optional smaller set; Go-template dialects still install:
 TREESITTER_LANGUAGES=bash,go,lua,python,yaml ~/.config/nvim/highlight.sh
 ```
@@ -241,17 +307,31 @@ ansible-playbook playbook.yml -K
 
 Linting and container tests (macOS cannot be tested in containers; test it on a real host or VM):
 
+Use a Python 3.14 virtual environment, as CI does, to keep pip dependencies separate from system packages such as `pyOpenSSL` and `cryptography`.
+Python 3.14 is the newest controller version supported by the current [Ansible release](https://docs.ansible.com/projects/ansible/latest/reference_appendices/release_and_maintenance.html#ansible-core-support-matrix).
+Install virtual environment support for your Python version if missing (for example, `python3.14-venv` on Debian/Ubuntu). Docker must be running for the container tests.
+
 ```bash
+python3.14 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install molecule "molecule-plugins[docker]" ansible ansible-core ansible-lint docker psutil yamllint
+python -m pip check
+ansible-galaxy install -r requirements.yml
 yamllint .
 ansible-lint
+bash tests/highlight.sh
+python tests/upgrades.py
+python tests/go.py
 # After provisioning a test Neovim config and its custom parsers:
 nvim --headless -u NONE -i NONE -l tests/neovim.lua
-pip install molecule "molecule-plugins[docker]"
+NVIM_HIGHLIGHT_SETUP=1 nvim --headless -i NONE -c 'luafile tests/pickers.lua'
 molecule --debug list # Validate scenario/driver configuration without creating containers
 molecule --debug syntax # Check role discovery and converge playbook syntax
 molecule converge   # Ubuntu, Debian, Kali, Parrot, and Mint containers
 molecule verify     # Both editors, template highlighting, and repeat-run checks
 molecule destroy
+deactivate
 ```
 
 The Linux Mint image is published for amd64 only; on an arm64 host it needs qemu/binfmt emulation (`docker run --privileged tonistiigi/binfmt --install amd64`). All other images are multi-arch.

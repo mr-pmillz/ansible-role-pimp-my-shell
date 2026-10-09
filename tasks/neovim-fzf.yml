@@ -1,0 +1,64 @@
+# code: language=ansible
+---
+- name: Manage the Neovim fuzzy finder
+  environment:
+    PATH: "{{ ansible_facts['env']['HOME'] }}/.local/bin:{{ ansible_facts['env']['HOME'] }}/.fzf/bin:{{ ansible_facts['env']['PATH'] }}:/opt/homebrew/bin:/usr/local/bin"
+    FZF_DEFAULT_OPTS: ""
+    FZF_DEFAULT_OPTS_FILE: ""
+  block:
+    - name: Check the available fzf version
+      ansible.builtin.command: fzf --version
+      register: pimp_my_shell_fzf_check
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: Install missing or incompatible fzf, or explicitly upgrade it
+      vars:
+        required_fzf_version: "{{ neovim_fzf_version if upgrade_components | bool else neovim_fzf_minimum_version }}"
+        installed_fzf_version: "{{ ((pimp_my_shell_fzf_check.stdout | default('')) | regex_findall('^([0-9]+[.][0-9]+[.][0-9]+)') | first) | default('0.0.0') }}"
+        fzf_os: "{{ 'darwin' if ansible_facts['os_family'] == 'Darwin' else 'linux' }}"
+        fzf_archive: "fzf-{{ neovim_fzf_version }}-{{ fzf_os }}_{{ pimp_my_shell_arch }}.tar.gz"
+        fzf_release_url: "https://github.com/junegunn/fzf/releases/download/v{{ neovim_fzf_version }}"
+        fzf_install_dir: "{{ ansible_facts['env']['HOME'] }}/.local/share/fzf/{{ neovim_fzf_version }}"
+      when:
+        - pimp_my_shell_fzf_check.rc != 0 or installed_fzf_version is version(required_fzf_version, '<')
+        - not ansible_check_mode
+      block:
+        - name: Create directories for the fuzzy finder
+          ansible.builtin.file:
+            path: "{{ item }}"
+            state: directory
+            mode: "0755"
+          loop:
+            - "{{ fzf_install_dir }}"
+            - "{{ ansible_facts['env']['HOME'] }}/.local/bin"
+
+        - name: Download and verify the fzf release
+          ansible.builtin.get_url:
+            url: "{{ fzf_release_url }}/{{ fzf_archive }}"
+            dest: "{{ fzf_install_dir }}/{{ fzf_archive }}"
+            checksum: "sha256:{{ fzf_release_url }}/fzf_{{ neovim_fzf_version }}_checksums.txt"
+            mode: "0644"
+
+        - name: Extract the fzf executable
+          ansible.builtin.unarchive:
+            src: "{{ fzf_install_dir }}/{{ fzf_archive }}"
+            dest: "{{ fzf_install_dir }}"
+            remote_src: true
+            creates: "{{ fzf_install_dir }}/fzf"
+
+        - name: Verify the extracted fzf release
+          ansible.builtin.command: "{{ fzf_install_dir }}/fzf --version"
+          register: pimp_my_shell_fzf_installed
+          changed_when: false
+          failed_when: >-
+            pimp_my_shell_fzf_installed.rc != 0 or
+            not pimp_my_shell_fzf_installed.stdout.startswith(neovim_fzf_version + ' ')
+
+        - name: Activate the compatible fuzzy finder
+          ansible.builtin.file:
+            src: "{{ fzf_install_dir }}/fzf"
+            dest: "{{ ansible_facts['env']['HOME'] }}/.local/bin/fzf"
+            state: link
+            force: true

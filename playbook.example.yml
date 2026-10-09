@@ -13,6 +13,8 @@
   become: false
   vars:
     dark_mode: true
+    # Opt in to updating the selected components; normal reruns keep versions.
+    # upgrade_components: true
     # No only_* flags means all components, including both Vim and Neovim.
     # Uncomment any combination here, or pass the same flags with -e:
     # only_vim: true

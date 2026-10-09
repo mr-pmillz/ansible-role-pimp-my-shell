@@ -1,0 +1,111 @@
+# code: language=ansible
+---
+- name: Manage the user-local Go toolchain
+  environment:
+    PATH: "{{ ansible_facts['env']['HOME'] }}/.local/bin:{{ ansible_facts['env']['PATH'] }}:/usr/local/go/bin:/opt/homebrew/bin:/usr/local/bin"
+    # Inspect the installed toolchain, without project-local settings or Go's
+    # automatic toolchain downloads changing the version being reported.
+    GOTOOLCHAIN: local
+    GOENV: "off"
+    GOROOT: ""
+  block:
+    - name: Validate the requested Go release
+      ansible.builtin.assert:
+        that:
+          - go_version is match('^[0-9]+[.][0-9]+[.][0-9]+$')
+        fail_msg: Set go_version to a stable release such as 1.27.2.
+
+    - name: Check the installed Go toolchain
+      ansible.builtin.command: go version
+      register: pimp_my_shell_go_check
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: Install a missing Go toolchain or explicitly upgrade an older one
+      vars:
+        installed_go_version: "{{ ((pimp_my_shell_go_check.stdout | default('')) | regex_findall('go([0-9]+[.][0-9]+(?:[.][0-9]+)?)') | first) | default('0.0.0') }}"
+        go_release: "{{ pimp_my_shell_go_downloads.json | selectattr('version', 'equalto', 'go' + go_version) | list }}"
+        go_os: "{{ 'darwin' if ansible_facts['os_family'] == 'Darwin' else 'linux' }}"
+        go_archives: >-
+          {{ go_release[0].files
+             | selectattr('os', 'equalto', go_os)
+             | selectattr('arch', 'equalto', pimp_my_shell_arch)
+             | selectattr('kind', 'equalto', 'archive') | list }}
+      when:
+        - >-
+          pimp_my_shell_go_check.rc != 0 or
+          (upgrade_components | bool and installed_go_version is version(go_version, '<'))
+        - not ansible_check_mode
+      block:
+        - name: Read official Go release checksums
+          ansible.builtin.uri:
+            url: https://go.dev/dl/?mode=json&include=all
+            return_content: true
+          register: pimp_my_shell_go_downloads
+
+        - name: Verify the requested Go release exists
+          ansible.builtin.assert:
+            that:
+              - go_release | length == 1
+            fail_msg: "Go {{ go_version }} was not found in the official release metadata."
+
+        - name: Verify a Go archive exists for this platform
+          ansible.builtin.assert:
+            that:
+              - go_archives | length == 1
+            fail_msg: "No Go {{ go_version }} archive is available for {{ go_os }}/{{ pimp_my_shell_arch }}."
+
+        - name: Create directories for the versioned Go installation
+          ansible.builtin.file:
+            path: "{{ item }}"
+            state: directory
+            mode: "0755"
+          loop:
+            - "{{ go_install_dir }}/{{ go_version }}"
+            - "{{ ansible_facts['env']['HOME'] }}/.local/bin"
+
+        - name: Download and verify the Go archive
+          ansible.builtin.get_url:
+            url: "https://go.dev/dl/{{ go_archives[0].filename }}"
+            dest: "{{ go_install_dir }}/{{ go_archives[0].filename }}"
+            checksum: "sha256:{{ go_archives[0].sha256 }}"
+            mode: "0644"
+
+        # Keep releases in separate directories: extracting a new release over
+        # an older Go tree can leave incompatible files behind.
+        - name: Extract the Go toolchain
+          ansible.builtin.unarchive:
+            src: "{{ go_install_dir }}/{{ go_archives[0].filename }}"
+            dest: "{{ go_install_dir }}/{{ go_version }}"
+            remote_src: true
+            extra_opts:
+              - --strip-components=1
+            creates: "{{ go_install_dir }}/{{ go_version }}/.pimp-my-shell-complete"
+
+        - name: Verify the extracted Go toolchain
+          ansible.builtin.command:
+            argv:
+              - "{{ go_install_dir }}/{{ go_version }}/bin/go"
+              - version
+          register: pimp_my_shell_go_installed
+          changed_when: false
+          failed_when: >-
+            pimp_my_shell_go_installed.rc != 0 or
+            ('go version go' + go_version + ' ') not in pimp_my_shell_go_installed.stdout
+
+        - name: Mark the Go archive as extracted successfully
+          ansible.builtin.copy:
+            content: "{{ go_version }}\n"
+            dest: "{{ go_install_dir }}/{{ go_version }}/.pimp-my-shell-complete"
+            mode: "0644"
+
+        - name: Activate the installed Go tools
+          ansible.builtin.file:
+            src: "{{ go_install_dir }}/{{ go_version }}/bin/{{ item }}"
+            dest: "{{ ansible_facts['env']['HOME'] }}/.local/bin/{{ item }}"
+            state: link
+            force: true
+          loop:
+            - go
+            - gofmt

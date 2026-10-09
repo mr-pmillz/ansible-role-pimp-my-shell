@@ -4,7 +4,7 @@
   ansible.builtin.git:  # noqa: latest[git] — intentionally tracks upstream default branch
     repo: https://github.com/gpakosz/.tmux
     dest: "{{ ansible_facts['env']['HOME'] }}/.tmux"
-    update: false
+    update: "{{ upgrade_components | bool }}"
 
 - name: Symlink ~/.tmux.conf to ~/.tmux/.tmux.conf
   ansible.builtin.file:
@@ -25,7 +25,7 @@
   ansible.builtin.git:  # noqa: latest[git] — intentionally tracks upstream default branch
     repo: https://github.com/tmux-plugins/tpm
     dest: "{{ ansible_facts['env']['HOME'] }}/.tmux/plugins/tpm"
-    update: false
+    update: "{{ upgrade_components | bool }}"
 
 # tmux-sensible is the first plugin listed in tmux.conf.local, so its
 # presence means install_plugins already ran successfully.
@@ -34,3 +34,24 @@
   args:
     executable: /bin/bash
     creates: "{{ ansible_facts['env']['HOME'] }}/.tmux/plugins/tmux-sensible"
+
+- name: Upgrade installed TPM plugins when requested
+  ansible.builtin.shell: |
+    set -euo pipefail
+    plugin_revisions() {
+      for repo in {{ (ansible_facts['env']['HOME'] + '/.tmux/plugins/') | quote }}*/.git; do
+        [[ -e "$repo" ]] || continue
+        git --git-dir="$repo" rev-parse HEAD
+      done
+    }
+    before=$(plugin_revisions)
+    {{ (ansible_facts['env']['HOME'] + '/.tmux/plugins/tpm/bin/update_plugins') | quote }} all
+    after=$(plugin_revisions)
+    if [[ "$before" != "$after" ]]; then
+      echo TPM_CHANGED=1
+    fi
+  args:
+    executable: /bin/bash
+  register: pimp_my_shell_tpm_upgrade
+  changed_when: "'TPM_CHANGED=1' in pimp_my_shell_tpm_upgrade.stdout"
+  when: upgrade_components | bool

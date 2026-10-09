@@ -93,7 +93,6 @@ pimp_my_shell_debian_component_packages:
     - python3-venv
     - ripgrep
     - fd-find
-    - fzf
   terminal_profiles:
     - dbus
     - dconf-cli

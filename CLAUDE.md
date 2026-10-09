@@ -30,7 +30,9 @@ Adding a component means touching four places: an `only_*` default, `pimp_my_she
 - **Component gating is on `include_tasks`, not inside task files** — task files stay independently usable.
 - **Installation guard files** still cover fzf and the existing Vim installers. Neovim setup checks actual plugin/parser state, waits for builds, verifies queries, and returns failures instead of recording a permanent success marker.
 - **`update: false` on git clones** — clones don't re-pull on later runs; `latest[git]` lint is noqa'd deliberately.
-- **Neovim**: `only_neovim` selects `neovim`; `only_vim` continues to select the independent awesome-vimrc `vim` component. Both run by default and use separate config/data directories and commands. Linux builds a compatible Neovim if necessary; Homebrew provides macOS Neovim. The shared `files/nvim/highlight.sh` installs Rust/Cargo if missing, tree-sitter-cli, Lazy plugins, and all supported parsers. Go development/Mason tools still need a Go toolchain.
+- **Neovim**: `only_neovim` selects `neovim`; `only_vim` continues to select the independent awesome-vimrc `vim` component. Both run by default and use separate config/data directories and commands. Linux builds a compatible Neovim if necessary; Homebrew provides macOS Neovim. The shared `files/nvim/highlight.sh` installs Rust/Cargo if missing, tree-sitter-cli, Lazy plugins, and all supported parsers. Either editor provisions missing Go through `tasks/go.yml`, using checksum-verified upstream archives and user-local symlinks.
+- **Upgrades**: `upgrade_components: false` preserves existing versions on normal reruns. Opting in updates selected package/Git dependencies, Go, and the Neovim Rust/Lazy/Tree-sitter setup; newer installed Go/Neovim/Tree-sitter releases are not downgraded.
+- **Fuzzy search**: `tasks/neovim-fzf.yml` repairs missing or incompatible fzf even for `only_neovim`. The picker prefers `~/.local/bin/fzf`, then `~/.fzf/bin/fzf`, over distro PATH entries. `tests/pickers.lua` exercises real file and live-grep results; run it with the installed config, not `-u NONE` or `-l`.
 - **Bundled config**: `files/nvim` contains source configuration only. Custom Go-template parsers are generated on the target. `files/nvim-lazy-lock.json` seeds new installs without overwriting user plugin updates. Keep the upstream grammar license and provenance in `files/nvim/README.md`.
 - **Facts, not bare vars**: use `ansible_facts['distribution']` / `['env']['HOME']` / `['user_id']` / `['user_gid']` — bare `ansible_*` fact vars are deprecated (removal in ansible-core 2.24).
 - **Parrot vs Kali terminal split**: Parrot uses MATE terminal dconf dumps (needs D-Bus; Xvfb started only under Molecule/GitHub Actions). Kali is a plain XFCE `terminalrc` copy, dark/light chosen by `dark_mode`.
@@ -44,7 +46,7 @@ molecule converge       # ubuntu, debian, kali, parrot, mint containers
 molecule destroy
 ```
 
-Molecule Dockerfiles are deliberately minimal (python3/sudo/golang/desktop terminal only) so the role's prereq installation is actually exercised. The Mint image is amd64-only (needs binfmt on arm64 hosts). macOS is not container-testable — verify on real hardware.
+Molecule Dockerfiles are deliberately minimal (python3/sudo/desktop terminal only) so the role's prereq installation, including Go, is actually exercised. The Mint image is amd64-only (needs binfmt on arm64 hosts). macOS is not container-testable — verify on real hardware.
 
 ## Gotchas
 

@@ -1,10 +1,18 @@
 # code: language=ansible
 ---
+- name: Upgrade Oh My Zsh when requested
+  ansible.builtin.git:  # noqa: latest[git] — intentionally tracks upstream default branch
+    repo: https://github.com/ohmyzsh/ohmyzsh.git
+    dest: "{{ ansible_facts['env']['HOME'] }}/.oh-my-zsh"
+    update: true
+  when: upgrade_components | bool
+
 - name: Installing custom zsh plugins
   ansible.builtin.git:  # noqa: latest[git] — intentionally tracks upstream default branch
     repo: "{{ item.repo }}"
     dest: "{{ item.location }}"
     depth: "{{ item.depth | default(omit) }}"
+    update: "{{ upgrade_components | bool }}"
   loop:
     - { repo: https://github.com/zsh-users/zsh-autosuggestions, location: "{{ ansible_facts['env']['HOME'] }}/.oh-my-zsh/custom/plugins/zsh-autosuggestions" }
     - { repo: https://github.com/zsh-users/zsh-syntax-highlighting, location: "{{ ansible_facts['env']['HOME'] }}/.oh-my-zsh/custom/plugins/zsh-syntax-highlighting" }

@@ -19,4 +19,4 @@
   become: true
   ansible.builtin.apt:
     name: "{{ pimp_my_shell_packages }}"
-    state: present
+    state: "{{ 'latest' if upgrade_components | bool else 'present' }}"

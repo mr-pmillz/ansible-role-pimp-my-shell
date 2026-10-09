@@ -17,6 +17,7 @@
     dest: "{{ fonts_dir }}/{{ item.name }}"
     mode: "0644"
     timeout: 30
+    force: "{{ upgrade_components | bool }}"
   loop: "{{ meslo_fonts }}"
   register: font_download
   until: font_download is succeeded
