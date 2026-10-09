@@ -41,8 +41,8 @@
   ansible.builtin.include_tasks: nerdfonts.yml
   when: "'nerdfonts' in pimp_my_shell_components"
 
-# On Linux, oh-my-zsh itself is installed by the gantsign.oh-my-zsh Galaxy
-# role (a dependency in meta/main.yml). On macOS that role is skipped, so
+# When zsh is selected on Linux, oh-my-zsh itself is installed by the
+# gantsign.oh-my-zsh dependency in meta/main.yml. On macOS it is skipped, so
 # bootstrap oh-my-zsh here via the official installer instead.
 - name: Check if oh-my-zsh is already installed (macOS)
   ansible.builtin.stat:

@@ -100,6 +100,7 @@ neovim_tree_sitter_version: "0.27.1"
 # Older distro fzf packages reject actions used by the bundled picker config.
 neovim_fzf_version: "0.74.4"
 neovim_fzf_minimum_version: "0.53.0"
+neovim_lazygit_version: "0.66.0"
 neovim_config_dir: "{{ ansible_facts['env']['XDG_CONFIG_HOME'] | default(ansible_facts['env']['HOME'] + '/.config', true) }}/nvim"
 neovim_prefix: "{{ ansible_facts['env']['HOME'] }}/.local"
 # All languages supported by the installed nvim-treesitter revision.

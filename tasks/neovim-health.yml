@@ -1,0 +1,69 @@
+# code: language=ansible
+---
+- name: Install the isolated Python provider for Neovim
+  ansible.builtin.pip:
+    name: pynvim
+    state: "{{ 'latest' if upgrade_components | bool else 'present' }}"
+    virtualenv: "{{ ansible_facts['env']['XDG_DATA_HOME'] | default(ansible_facts['env']['HOME'] + '/.local/share', true) }}/nvim/python"
+    virtualenv_command: python3 -m venv
+  environment:
+    PATH: "{{ '/opt/homebrew/bin:/usr/local/bin:' if ansible_facts['os_family'] == 'Darwin' else '' }}{{ ansible_facts['env']['PATH'] }}"
+
+- name: Check for lazygit
+  ansible.builtin.command: lazygit --version
+  environment:
+    PATH: "{{ ansible_facts['env']['HOME'] }}/.local/bin:{{ ansible_facts['env']['HOME'] }}/go/bin:{{ ansible_facts['env']['PATH'] }}:/opt/homebrew/bin:/usr/local/bin"
+  register: pimp_my_shell_lazygit_check
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Install missing lazygit or explicitly upgrade an older release
+  vars:
+    lazygit_installed_version: "{{ ((pimp_my_shell_lazygit_check.stdout | default('')) | regex_findall('version=([0-9]+[.][0-9]+[.][0-9]+)') | first) | default('0.0.0') }}"
+    lazygit_os: "{{ 'darwin' if ansible_facts['os_family'] == 'Darwin' else 'linux' }}"
+    lazygit_arch: "{{ 'x86_64' if pimp_my_shell_arch == 'amd64' else 'arm64' }}"
+    lazygit_archive: "lazygit_{{ neovim_lazygit_version }}_{{ lazygit_os }}_{{ lazygit_arch }}.tar.gz"
+    lazygit_url: "https://github.com/jesseduffield/lazygit/releases/download/v{{ neovim_lazygit_version }}"
+    lazygit_dir: "{{ ansible_facts['env']['HOME'] }}/.local/share/lazygit/{{ neovim_lazygit_version }}"
+  when:
+    - pimp_my_shell_lazygit_check.rc != 0 or (upgrade_components | bool and lazygit_installed_version is version(neovim_lazygit_version, '<'))
+    - not ansible_check_mode
+  block:
+    - name: Create directories for lazygit
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - "{{ lazygit_dir }}"
+        - "{{ ansible_facts['env']['HOME'] }}/.local/bin"
+
+    - name: Download and verify lazygit
+      ansible.builtin.get_url:
+        url: "{{ lazygit_url }}/{{ lazygit_archive }}"
+        dest: "{{ lazygit_dir }}/{{ lazygit_archive }}"
+        checksum: "sha256:{{ lazygit_url }}/checksums.txt"
+        mode: "0644"
+
+    - name: Extract lazygit
+      ansible.builtin.unarchive:
+        src: "{{ lazygit_dir }}/{{ lazygit_archive }}"
+        dest: "{{ lazygit_dir }}"
+        remote_src: true
+        creates: "{{ lazygit_dir }}/lazygit"
+
+    - name: Verify the installed lazygit release
+      ansible.builtin.command: "{{ lazygit_dir }}/lazygit --version"
+      register: pimp_my_shell_lazygit_installed
+      changed_when: false
+      failed_when: >-
+        pimp_my_shell_lazygit_installed.rc != 0 or
+        ('version=' + neovim_lazygit_version + ',') not in pimp_my_shell_lazygit_installed.stdout
+
+    - name: Activate lazygit
+      ansible.builtin.file:
+        src: "{{ lazygit_dir }}/lazygit"
+        dest: "{{ ansible_facts['env']['HOME'] }}/.local/bin/lazygit"
+        state: link
+        force: true

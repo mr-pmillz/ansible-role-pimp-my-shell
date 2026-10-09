@@ -11,5 +11,19 @@
 vim.filetype.add({
   extension = {
     cue = "cue",
+    shtml = "superhtml",
+  },
+  filename = {
+    [".gitlab-ci.yml"] = "yaml.gitlab",
+    [".gitlab-ci.yaml"] = "yaml.gitlab",
+    ["docker-compose.yml"] = "yaml.docker-compose",
+    ["docker-compose.yaml"] = "yaml.docker-compose",
+    ["compose.yml"] = "yaml.docker-compose",
+    ["compose.yaml"] = "yaml.docker-compose",
+  },
+  pattern = {
+    [".*/values.*%.ya?ml"] = function(path)
+      return vim.fs.root(path, "Chart.yaml") and "yaml.helm-values" or nil
+    end,
   },
 })

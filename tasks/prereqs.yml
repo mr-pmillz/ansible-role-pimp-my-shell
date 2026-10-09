@@ -15,3 +15,7 @@
 - name: Install a compatible fuzzy finder for Neovim
   ansible.builtin.include_tasks: neovim-fzf.yml
   when: "'neovim' in pimp_my_shell_components"
+
+- name: Install Neovim health prerequisites
+  ansible.builtin.include_tasks: neovim-health.yml
+  when: "'neovim' in pimp_my_shell_components"

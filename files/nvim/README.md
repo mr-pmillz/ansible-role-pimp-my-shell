@@ -22,7 +22,8 @@ existing plugin versions.
 
 File search (`Space Space`) and text search (`Space /`) use fzf-lua. Provide
 fzf >= 0.53, ripgrep, and fd/fdfind. The Ansible role installs these prerequisites
-and repairs incompatible distro fzf versions. The picker prefers `~/.local/bin/fzf`,
+and repairs incompatible distro fzf versions using the upstream Git checkout and
+`~/.fzf/install --bin`, without changing shell configuration. The picker prefers `~/.local/bin/fzf`,
 then `~/.fzf/bin/fzf`, before falling back to PATH.
 
 `config/treesitter.lua` is the shared custom-parser registration; it uses

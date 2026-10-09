@@ -22,7 +22,9 @@ local function detect(path, bufnr)
 end
 
 vim.filetype.add({
-  extension = { gotmpl = detect, gohtml = detect, gtemp = detect },
+  -- Literal fallback names also register these filetypes for LSP health checks;
+  -- the higher-priority patterns below still choose language-specific dialects.
+  extension = { gotmpl = "gotmpl", gohtml = "html_gotmpl", gtemp = "gotmpl" },
   -- Neovim's .env.* pattern runs before extension rules.
   pattern = {
     [".*%.gotmpl"] = { detect, { priority = 100 } },

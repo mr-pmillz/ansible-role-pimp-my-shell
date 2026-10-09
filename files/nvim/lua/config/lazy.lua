@@ -33,6 +33,8 @@ require("lazy").setup({
     -- version = "*", -- try installing the latest stable version for plugins that support semver
   },
   install = { colorscheme = { "tokyonight", "habamax" } },
+  -- The bundled plugins do not use rockspec builds. Enable this if adding one.
+  rocks = { enabled = false },
   checker = {
     enabled = vim.env.NVIM_HIGHLIGHT_SETUP ~= "1", -- check during interactive use
     notify = false, -- notify on update

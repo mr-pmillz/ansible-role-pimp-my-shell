@@ -6,6 +6,5 @@
   vars:
     dark_mode: true
   roles:
-    # gantsign.oh-my-zsh runs automatically first via meta/main.yml
-    # dependencies (Linux only).
+    # gantsign.oh-my-zsh runs first on Linux when zsh is selected.
     - role: mr_pmillz.pimp_my_shell

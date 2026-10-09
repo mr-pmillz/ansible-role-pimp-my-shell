@@ -46,7 +46,7 @@ are reused unless `upgrade_components=true` requests an upgrade to `go_version`.
 
 ## Role dependencies
 
-[`gantsign.oh-my-zsh`](https://galaxy.ansible.com/gantsign/oh-my-zsh) is declared in `meta/main.yml` and runs automatically before this role **on Linux** (it installs zsh and oh-my-zsh and sets the default shell). On macOS it is skipped and this role bootstraps oh-my-zsh with the official installer script instead.
+[`gantsign.oh-my-zsh`](https://galaxy.ansible.com/gantsign/oh-my-zsh) is declared in `meta/main.yml` and runs **on Linux when the zsh component is selected** (it installs zsh and oh-my-zsh and sets the default shell). A Neovim-only run skips it, preserving the existing `.zshrc`, theme, and login shell. On macOS this role bootstraps oh-my-zsh with the official installer script when zsh is selected.
 
 ```bash
 ansible-galaxy install -r requirements.yml
@@ -84,6 +84,47 @@ ansible-playbook playbook.yml -K -e only_neovim=true
 The example enables `dark_mode: true`. Edit `playbook.yml` for persistent settings,
 or use the [selection flags](#selective-installation) below to choose components
 for each run. You can also run `playbook.example.yml` directly without renaming it.
+
+### Restoring an overwritten Zsh configuration
+
+Older versions ran the Oh My Zsh dependency even during `only_neovim=true` and
+could overwrite an existing `~/.zshrc`. Neovim-only runs now skip that dependency
+and all Zsh tasks. Runs that select Zsh intentionally manage `.zshrc`; both the
+dependency and this role's Zsh template keep Ansible backups when changing it.
+
+List the backups on the affected machine:
+
+```bash
+ls -lt ~/.zshrc*
+```
+
+Ansible backup names resemble `~/.zshrc.<PID>.<DATE>@<TIME>~`. Inspect candidates
+and select the backup from **before the first unwanted change**. Repeated runs
+can create later backups that already contain the unwanted configuration.
+
+```bash
+# Keep the current file too; mktemp gives it a unique name.
+zshrc_saved=$(mktemp "$HOME/.zshrc.before-restore.XXXXXX")
+cp -p "$HOME/.zshrc" "$zshrc_saved"
+
+# Replace this example path with the actual backup you chose.
+cp -p '/full/path/to/the/chosen/.zshrc.backup~' "$HOME/.zshrc"
+exec zsh
+```
+
+Restoring the file recovers its previous theme, plugins, and custom settings.
+If there is no usable backup and you want the role's Powerlevel10k configuration,
+save the current file as above, then explicitly select Zsh:
+
+```bash
+ansible-playbook playbook.yml -K -e only_zsh=true \
+  -e oh_my_zsh_theme=powerlevel10k/powerlevel10k
+exec zsh
+```
+
+The Powerlevel10k command rebuilds the managed configuration; it cannot recover
+customizations from a lost original file. The role's Zsh snippet now preserves
+the terminal's existing `TERM` value, including `tmux-256color` inside tmux.
 
 ## Role variables
 
@@ -158,8 +199,8 @@ actual installed state, skips compatible tools and completed plugin/parser build
 and repairs missing files. A successful unchanged rerun reports no Neovim changes.
 The existing Vim component retains its original installation guards. After installing
 both, launch `vim` for awesome-vimrc or `nvim` for LazyVim. Your default editor and
-shell command names are not redirected. On Linux the role's existing
-`gantsign.oh-my-zsh` dependency still runs before the selected components.
+shell command names are not redirected. Neovim-only runs install Neovim and its
+prerequisites without running the Zsh, Vim, or other unselected components.
 
 Fresh installations use the configured Go/Neovim/fzf/Tree-sitter releases, the bundled
 Lazy lockfile, and current upstream branches for the other Git-based tools.
@@ -201,6 +242,7 @@ are included when no `only_*` flags are set.
 | `neovim_tree_sitter_version` | `0.27.1` | Tree-sitter CLI release for installs and explicit upgrades |
 | `neovim_fzf_version` | `0.74.4` | Upstream fzf release when missing, incompatible, or explicitly upgraded |
 | `neovim_fzf_minimum_version` | `0.53.0` | Minimum compatible fzf for the bundled fuzzy picker |
+| `neovim_lazygit_version` | `0.66.0` | Checksum-verified lazygit release for missing installs or explicit upgrades |
 | `neovim_prefix` | `~/.local` | Linux installation prefix |
 | `neovim_config_dir` | `$XDG_CONFIG_HOME/nvim` or `~/.config/nvim` | Destination for the bundled config |
 | `neovim_treesitter_languages` | `[all]` | Upstream parser languages; five custom dialects and their dependencies always install |
@@ -219,9 +261,22 @@ already exist; the user-local Rust/Cargo and plugin setup still runs.
 `Space Space` opens the fuzzy file picker; `Space /` searches file contents.
 Both use `fzf-lua`. Some distribution packages are too old for the configured
 picker: fzf 0.44.1, for example, fails with `unknown action: transform`.
-The role installs a checksum-verified upstream fzf into `~/.local/bin` when the
-existing version is below the supported minimum, including with `only_neovim`.
-The Neovim configuration prefers that binary over a distro copy earlier on PATH.
+The role uses [fzf's upstream Git installer](https://github.com/junegunn/fzf#using-git),
+not apt or Homebrew, to install fzf. The equivalent interactive commands are:
+
+```bash
+git clone --depth 1 https://github.com/junegunn/fzf.git ~/.fzf
+~/.fzf/install
+```
+
+For Neovim-only runs, Ansible checks out the configured release when fzf is missing
+or below the supported minimum and runs `~/.fzf/install --bin`. This installs the
+executable without touching `.zshrc`, `.bashrc`, or other shell configuration.
+It links `~/.local/bin/fzf` to `~/.fzf/bin/fzf`; Neovim prefers this over an old
+distro copy earlier on PATH. CLI-tools runs use `--all` to enable shell integration.
+The upstream installer normally downloads a native binary and falls back to
+compiling with Go when a binary is unavailable. Compatible existing versions are
+retained on normal Neovim-only reruns; use `upgrade_components=true` for upgrades.
 
 To repair an installation made with an older role checkout, update the checkout
 and rerun your normal command, then restart Neovim:
@@ -234,6 +289,37 @@ This compatibility repair does not require the upgrade flag. If search still
 fails, run `:checkhealth fzf-lua` and `:messages` in Neovim. The role also installs
 `rg` and `fd`/`fdfind`; a general health check reporting that fzf exists does not
 establish version compatibility.
+
+### Understanding health-check warnings
+
+The Neovim prerequisites include lazygit, fd/fdfind, Linux inotify tools, SQLite,
+and an isolated `pynvim` environment in the Neovim data directory (`nvim/python`).
+The Python provider uses that environment instead of distro or project packages.
+Unused Node, Perl, and Ruby remote-plugin providers and Lazy's unused LuaRocks
+support are disabled in the bundled configuration. Re-enable the corresponding
+settings in `lua/config/options.lua` or `lua/config/lazy.lua` if adding plugins
+that need them. Language servers and external language tools are separate from
+these remote-plugin providers.
+
+Some upstream health checks also inspect optional or disabled features:
+
+- Mason reports absent PHP/Composer, Java/Javac, Julia, or LuaRocks even when no
+  selected language tool needs them. Install those runtimes when using their
+  Mason packages; they are not required for the bundled Go/YAML/JSON setup.
+- Snacks reports its disabled picker/explorer/statuscolumn modules. This config
+  uses fzf-lua and Neo-tree. Enabling competing modules solely to clear these
+  messages would change the configured editor behavior.
+- Image, LaTeX, and Mermaid previews need optional conversion tools and a
+  terminal supporting the Kitty graphics protocol, such as Kitty or Ghostty.
+  Installing a terminal executable cannot add that protocol to an existing
+  GNOME/MATE terminal session. Norg is not among the bundled supported parsers.
+- Which-key's `gc`, `gr`, `a`, and `i` prefix overlap reports are informational;
+  they describe normal operator/text-object mappings, not duplicate bindings.
+- Dashboard checks may report that it did not open when Neovim was launched
+  with a file. Headless checks also cannot verify interactive UI setup.
+
+Run `:checkhealth` in an interactive Neovim session for terminal/UI diagnostics.
+The role preserves these upstream reports so real failures remain visible.
 
 ### Tree-sitter setup
 
@@ -322,10 +408,13 @@ yamllint .
 ansible-lint
 bash tests/highlight.sh
 python tests/upgrades.py
+python tests/selection.py
+python tests/fzf.py
 python tests/go.py
 # After provisioning a test Neovim config and its custom parsers:
 nvim --headless -u NONE -i NONE -l tests/neovim.lua
 NVIM_HIGHLIGHT_SETUP=1 nvim --headless -i NONE -c 'luafile tests/pickers.lua'
+NVIM_HIGHLIGHT_SETUP=1 nvim --headless -i NONE -c 'luafile tests/health.lua'
 molecule --debug list # Validate scenario/driver configuration without creating containers
 molecule --debug syntax # Check role discovery and converge playbook syntax
 molecule converge   # Ubuntu, Debian, Kali, Parrot, and Mint containers
@@ -335,6 +424,18 @@ deactivate
 ```
 
 The Linux Mint image is published for amd64 only; on an arm64 host it needs qemu/binfmt emulation (`docker run --privileged tonistiigi/binfmt --install amd64`). All other images are multi-arch.
+
+### CI security and action updates
+
+CI uses GitHub-hosted runners, read-only repository permissions, and full commit
+SHA pins for all external actions. Checkout credentials are not persisted for
+test commands, and the workflow does not request secrets or OIDC credentials.
+Job timeouts and cancellation of superseded runs bound resource usage.
+Dependabot checks action versions weekly and opens update PRs; updates still
+need review and passing CI. Action pins are Git commit SHAs, not SHA-256 digests.
+
+See the [workflow security audit](docs/ci-security-audit.md) for verified action
+versions, findings, and the repository settings that need separate verification.
 
 ## License
 

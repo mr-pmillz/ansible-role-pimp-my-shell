@@ -91,6 +91,9 @@ pimp_my_shell_debian_component_packages:
     - nodejs
     - npm
     - python3-venv
+    - python3-packaging
+    - libsqlite3-0
+    - inotify-tools
     - ripgrep
     - fd-find
   terminal_profiles:
@@ -114,10 +117,11 @@ pimp_my_shell_darwin_component_packages:
     - vim
   neovim:
     - neovim
+    - python
+    - sqlite
     - node
     - ripgrep
     - fd
-    - fzf
     - pkgconf
 
 # ── Nerd Fonts ────────────────────────────────────────────────────────────

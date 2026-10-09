@@ -54,7 +54,8 @@ if [[ -z "${GOPATH}" ]]; then export GOPATH="${HOME}/go"; fi
 # Set CTRL+U to only delete backwards to the left of the cursor.
 bindkey \^U backward-kill-line
 
-export TERM="xterm-256color"
+# Preserve TERM supplied by the terminal or tmux; overriding it here breaks
+# terminfo and makes Neovim report a tmux/default-terminal mismatch.
 
 # To customize prompt, run `p10k configure` or edit ~/.p10k.zsh.
 [[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh

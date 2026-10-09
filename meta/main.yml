@@ -40,11 +40,13 @@ galaxy_info:
     - kali
     - parrot
 
-# oh-my-zsh itself is provided by gantsign.oh-my-zsh on Linux. On macOS the
-# Galaxy role is skipped (it is not verified on Darwin) and this role
-# bootstraps oh-my-zsh via the official installer script instead.
+# Run the shell dependency only when zsh is selected. In particular,
+# only_neovim must not rewrite an existing .zshrc or change the login shell.
+# On macOS this role uses the official installer in the zsh component instead.
 dependencies:
   - role: gantsign.oh-my-zsh
     vars:
       users: "{{ oh_my_zsh_users | default([{'username': ansible_facts['user_id']}]) }}"
-    when: ansible_facts['os_family'] != 'Darwin'
+    when:
+      - ansible_facts['os_family'] != 'Darwin'
+      - "'zsh' in pimp_my_shell_components"
