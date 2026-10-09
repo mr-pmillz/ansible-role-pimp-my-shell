@@ -86,6 +86,10 @@
   ansible.builtin.include_tasks: vim.yml
   when: "'vim' in pimp_my_shell_components"
 
+- name: Configuring Neovim and LazyVim
+  ansible.builtin.include_tasks: neovim.yml
+  when: "'neovim' in pimp_my_shell_components"
+
 - name: Copy BashRC
   ansible.builtin.copy:
     src: "{{ role_path }}/files/.bashrc"

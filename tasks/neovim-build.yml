@@ -1,0 +1,31 @@
+# code: language=ansible
+---
+- name: Create user-local Neovim source directory
+  ansible.builtin.file:
+    path: "{{ neovim_prefix }}/src"
+    state: directory
+    mode: "0755"
+
+- name: Clone Neovim release sources
+  ansible.builtin.git:
+    repo: https://github.com/neovim/neovim.git
+    dest: "{{ neovim_prefix }}/src/neovim"
+    version: "{{ neovim_version }}"
+    depth: 1
+
+- name: Build Neovim with LuaJIT
+  ansible.builtin.command:
+    argv:
+      - make
+      - CMAKE_BUILD_TYPE=Release
+      - "CMAKE_INSTALL_PREFIX={{ neovim_prefix }}"
+    chdir: "{{ neovim_prefix }}/src/neovim"
+  changed_when: true
+  when: not ansible_check_mode
+
+- name: Install Neovim in user-local prefix
+  ansible.builtin.command:
+    argv: [make, install]
+    chdir: "{{ neovim_prefix }}/src/neovim"
+  changed_when: true
+  when: not ansible_check_mode

@@ -41,8 +41,9 @@ ZSH_HIGHLIGHT_STYLES[bracket-level-3]=fg=magenta,bold
 ZSH_HIGHLIGHT_STYLES[bracket-level-4]=fg=yellow,bold
 ZSH_HIGHLIGHT_STYLES[bracket-level-5]=fg=cyan,bold
 ZSH_HIGHLIGHT_STYLES[cursor-matchingbracket]=standout
-# For linux add ~/.local/bin to path
-[[ ":$PATH:" != *":${HOME}/.locaal/bin:"* ]] && export PATH="${PATH}:${HOME}/.local/bin"
+# User-local Neovim and Rust/Cargo tools.
+[[ ":$PATH:" != *":${HOME}/.local/bin:"* ]] && export PATH="${HOME}/.local/bin:${PATH}"
+[[ ":$PATH:" != *":${CARGO_HOME:-$HOME/.cargo}/bin:"* ]] && export PATH="${CARGO_HOME:-$HOME/.cargo}/bin:${PATH}"
 
 # Add ~/go/bin to path
 [[ ":$PATH:" != *":${HOME}/go/bin:"* ]] && export PATH="${PATH}:${HOME}/go/bin"

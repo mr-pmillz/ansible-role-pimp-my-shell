@@ -1,0 +1,95 @@
+local schemas = {}
+schemas["https://gitlab.com/gitlab-org/gitlab/-/raw/master/app/assets/javascripts/editor/schema/ci.json"] = {
+  ".gitlab-ci.yml",
+  ".gitlab-ci.yaml",
+  ".gitlab/ci/*.yml",
+  ".gitlab/ci/*.yaml",
+}
+return {
+  {
+    "neovim/nvim-lspconfig",
+    opts = {
+      servers = {
+        cue = {
+          cmd = { "cue", "lsp", "serve" },
+          filetypes = { "cue" },
+        },
+        yamlls = {
+          settings = {
+            yaml = {
+              schemaStore = {
+                enable = true,
+                url = "https://www.schemastore.org/api/json/catalog.json",
+              },
+              schemas = schemas,
+              customTags = {
+                "!reference scalar",
+                "!reference sequence",
+                "!reference mapping",
+              },
+            },
+          },
+        },
+        -- Golang configurations
+        gopls = {
+          settings = {
+            gopls = {
+              gofumpt = true,
+              codelenses = {
+                gc_details = false,
+                generate = true,
+                regenerate_cgo = true,
+                run_govulncheck = true,
+                test = true,
+                tidy = true,
+                upgrade_dependency = true,
+                vendor = true,
+              },
+              hints = {
+                assignVariableTypes = true,
+                compositeLiteralFields = true,
+                compositeLiteralTypes = true,
+                constantValues = true,
+                functionTypeParameters = true,
+                parameterNames = true,
+                rangeVariableTypes = true,
+              },
+              analyses = {
+                nilness = true,
+                unusedparams = true,
+                unusedwrite = true,
+                useany = true,
+              },
+              usePlaceholders = true,
+              completeUnimported = true,
+              staticcheck = true,
+              directoryFilters = { "-.git", "-.vscode", "-.idea", "-.vscode-test", "-node_modules" },
+              semanticTokens = true,
+            },
+          },
+        },
+        superhtml = {},
+      },
+      setup = {
+        gopls = function(_, opts)
+          -- workaround for gopls not supporting semanticTokensProvider
+          -- https://github.com/golang/go/issues/54531#issuecomment-1464982242
+          require("snacks").util.lsp.on({ name = "gopls" }, function(_, client)
+            if not client.server_capabilities.semanticTokensProvider then
+              local semantic = client.config.capabilities.textDocument.semanticTokens
+              client.server_capabilities.semanticTokensProvider = {
+                full = true,
+                legend = {
+                  tokenTypes = semantic.tokenTypes,
+                  tokenModifiers = semantic.tokenModifiers,
+                },
+                range = true,
+              }
+            end
+          end)
+          -- end workaround
+        end,
+      },
+    },
+  },
+}

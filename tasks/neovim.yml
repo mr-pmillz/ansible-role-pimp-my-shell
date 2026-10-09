@@ -1,0 +1,76 @@
+# code: language=ansible
+---
+- name: Configure Neovim with user-local tools on PATH
+  environment:
+    PATH: "{{ neovim_prefix }}/bin:{{ ansible_facts['env']['CARGO_HOME'] | default(ansible_facts['env']['HOME'] + '/.cargo', true) }}/bin:/opt/homebrew/bin:/usr/local/bin:{{ ansible_facts['env']['PATH'] }}"
+  block:
+    - name: Check for a compatible Neovim
+      ansible.builtin.shell: |
+        nvim --clean --headless -i NONE -c {{ ('lua os.exit(vim.fn.has("nvim-' + neovim_minimum_version + '") == 1 and jit and 0 or 1)') | quote }}
+      args:
+        executable: /bin/bash
+      register: pimp_my_shell_neovim_check
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: Build a current Neovim on Linux
+      ansible.builtin.include_tasks: neovim-build.yml
+      when:
+        - pimp_my_shell_neovim_check.rc != 0
+        - ansible_facts['os_family'] == 'Debian'
+        - install_prerequisites | bool
+
+    - name: Upgrade an incompatible Homebrew Neovim
+      community.general.homebrew:
+        name: neovim
+        state: latest
+        path: "{{ pimp_my_shell_homebrew_prefix }}/bin"
+      when:
+        - pimp_my_shell_neovim_check.rc != 0
+        - ansible_facts['os_family'] == 'Darwin'
+        - install_prerequisites | bool
+
+    - name: Verify Neovim meets the bundled plugin requirements
+      ansible.builtin.shell: |
+        set -e
+        nvim --clean --headless -i NONE -c {{ ('lua os.exit(vim.fn.has("nvim-' + neovim_minimum_version + '") == 1 and jit and 0 or 1)') | quote }}
+        command -v nvim
+      args:
+        executable: /bin/bash
+      register: pimp_my_shell_neovim_executable
+      changed_when: false
+      when: not ansible_check_mode
+
+    - name: Create Neovim configuration directory
+      ansible.builtin.file:
+        path: "{{ neovim_config_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: Install LazyVim configuration and highlighting installer
+      ansible.builtin.copy:
+        src: "{{ role_path }}/files/nvim/"
+        dest: "{{ neovim_config_dir }}/"
+        mode: preserve
+        backup: true
+
+    - name: Seed plugin versions for new installations
+      ansible.builtin.copy:
+        src: "{{ role_path }}/files/nvim-lazy-lock.json"
+        dest: "{{ neovim_config_dir }}/lazy-lock.json"
+        force: false
+        mode: "0644"
+
+    - name: Install Rust, Cargo, LazyVim plugins, and Tree-sitter highlighters
+      ansible.builtin.command:
+        argv:
+          - "{{ neovim_config_dir }}/highlight.sh"
+      environment:
+        NVIM_BIN: "{{ pimp_my_shell_neovim_executable.stdout | trim }}"
+        TREESITTER_LANGUAGES: "{{ neovim_treesitter_languages | join(',') }}"
+        TREESITTER_JOBS: "{{ neovim_treesitter_jobs | string }}"
+        TREESITTER_TIMEOUT: "{{ neovim_treesitter_timeout | string }}"
+      register: pimp_my_shell_neovim_setup
+      changed_when: "'HIGHLIGHT_CHANGED=1' in pimp_my_shell_neovim_setup.stdout"
+      when: not ansible_check_mode

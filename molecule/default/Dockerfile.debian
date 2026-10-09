@@ -1,7 +1,7 @@
 FROM debian:stable
 
 ENV DEBIAN_FRONTEND=noninteractive
-# Keep this image minimal: zsh/git/tmux/vim/bat/fontconfig/etc. are
+# Keep this image minimal: zsh/git/tmux/neovim/bat/fontconfig/etc. are
 # deliberately NOT pre-installed so the role's own prerequisite
 # installation (tasks/prereqs-debian.yml) is exercised by molecule.
 # The apt lists are kept so the gantsign.oh-my-zsh dependency can

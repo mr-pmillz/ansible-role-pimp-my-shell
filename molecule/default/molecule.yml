@@ -13,7 +13,6 @@ platforms:
     privileged: true
     pre_build_image: false
     dockerfile: Dockerfile.ubuntu
-    ansible_user: root
     env:
       USER: root
   - name: debian-pimp-my-shell
@@ -21,7 +20,6 @@ platforms:
     privileged: true
     pre_build_image: false
     dockerfile: Dockerfile.debian
-    ansible_user: root
     env:
       USER: root
   - name: kali-pimp-my-shell
@@ -29,7 +27,6 @@ platforms:
     privileged: true
     pre_build_image: false
     dockerfile: Dockerfile.kali
-    ansible_user: root
     env:
       USER: root
   - name: parrot-pimp-my-shell
@@ -37,7 +34,6 @@ platforms:
     privileged: true
     pre_build_image: false
     dockerfile: Dockerfile.parrot
-    ansible_user: root
     env:
       USER: root
   - name: mint-pimp-my-shell
@@ -49,19 +45,16 @@ platforms:
     privileged: true
     pre_build_image: false
     dockerfile: Dockerfile.mint
-    ansible_user: root
     env:
       USER: root
 provisioner:
   name: ansible
-  env:
-    # Molecule used to add ${MOLECULE_PROJECT_DIRECTORY}/. to this
-    # path for us pre-25.2.0, but now we have to do it ourselves. See
-    # ansible/molecule#4380 and
-    # https://github.com/ansible/molecule/releases/tag/v25.2.0 for
-    # more details. Molecule symlinks this role into its cache roles dir
-    # under its galaxy name (mr_pmillz.pimp_my_shell).
-    ANSIBLE_ROLES_PATH: ~/.cache/molecule/ansible-role-pimp-my-shell/${MOLECULE_SCENARIO_NAME}/roles:~/.ansible/roles:/usr/share/ansible/roles:/etc/ansible/roles
+  inventory:
+    group_vars:
+      all:
+        # Connection variables belong in Ansible inventory, not Docker platforms.
+        ansible_user: root
+# Let Molecule prerun supply role paths; cache locations vary by version.
 verifier:
   name: ansible
 scenario:

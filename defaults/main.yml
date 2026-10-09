@@ -2,7 +2,7 @@
 ---
 # Whether this role installs its own prerequisite packages (apt on
 # Debian-family distros, Homebrew on macOS). Set to false if another
-# role or process already provides zsh/git/tmux/vim/bat/etc.
+# role or process already provides zsh/git/tmux/neovim/bat/etc.
 install_prerequisites: true
 
 # Users that the gantsign.oh-my-zsh dependency configures on Linux.
@@ -74,9 +74,25 @@ only_console_setup: false
 only_tmux: false
 # bat config and fzf (cli-tools.yml)
 only_cli_tools: false
-# awesome-vimrc, vim plugins, ~/.vimrc, my_configs.vim (vim.yml)
+# awesome-vimrc, Vim plugins, ~/.vimrc, my_configs.vim (vim.yml)
 only_vim: false
+# Neovim, LazyVim, Rust/Cargo, and Tree-sitter (neovim.yml)
+only_neovim: false
 # ~/.bashrc
 only_bashrc: false
 # XFCE/MATE/GNOME/Terminal.app profiles (terminal-profiles-*.yml)
 only_terminal_profiles: false
+
+# Linux builds this release when the existing Neovim is too old or missing.
+# macOS uses Homebrew. A compatible existing Neovim is reused.
+neovim_version: v0.12.6
+neovim_minimum_version: "0.12.0"
+neovim_config_dir: "{{ ansible_facts['env']['XDG_CONFIG_HOME'] | default(ansible_facts['env']['HOME'] + '/.config', true) }}/nvim"
+neovim_prefix: "{{ ansible_facts['env']['HOME'] }}/.local"
+# All languages supported by the installed nvim-treesitter revision.
+# Set a list (e.g. [bash, go, lua, yaml]) to limit upstream parsers.
+# The five custom Go-template dialects and their base languages always install.
+neovim_treesitter_languages:
+  - all
+neovim_treesitter_jobs: 4
+neovim_treesitter_timeout: 3600

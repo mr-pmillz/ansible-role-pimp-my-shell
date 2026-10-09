@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with th
 
 ## Purpose
 
-Standalone Ansible role (`mr_pmillz.pimp_my_shell`) that configures zsh (oh-my-zsh + powerlevel10k), tmux (oh-my-tmux + TPM), vim (awesome-vimrc + 12 plugins), bat, fzf, Nerd Fonts, the UTF-8 boot console, and OS-specific terminal profiles. Extracted from the `customize-terminal` role in `ansible-role-kali-parrot` and generalized.
+Standalone Ansible role (`mr_pmillz.pimp_my_shell`) that configures zsh (oh-my-zsh + powerlevel10k), tmux (oh-my-tmux + TPM), Vim (awesome-vimrc + 12 plugins), Neovim (LazyVim + custom language extras + Tree-sitter), bat, fzf, Nerd Fonts, the UTF-8 boot console, and OS-specific terminal profiles. Extracted from the `customize-terminal` role in `ansible-role-kali-parrot` and generalized.
 
 Supported: Ubuntu, Debian, Linux Mint, Kali, Parrot, macOS — amd64 and arm64, detected dynamically (`pimp_my_shell_arch` fact set in `tasks/main.yml` from `pimp_my_shell_arch_map` in `vars/main.yml`).
 
@@ -28,9 +28,10 @@ Adding a component means touching four places: an `only_*` default, `pimp_my_she
 ## Key patterns
 
 - **Component gating is on `include_tasks`, not inside task files** — task files stay independently usable.
-- **Installation guard files** (`~/fzf_is_installed.txt`, `~/vim_awesome_is_installed.txt`, …) prevent expensive re-runs (fzf install, YCM build, vim-go binaries).
+- **Installation guard files** still cover fzf and the existing Vim installers. Neovim setup checks actual plugin/parser state, waits for builds, verifies queries, and returns failures instead of recording a permanent success marker.
 - **`update: false` on git clones** — clones don't re-pull on later runs; `latest[git]` lint is noqa'd deliberately.
-- **Go is optional**: vim-go binaries install only if `command -v go` succeeds (checked with an extended PATH covering /usr/local/go/bin, ~/go/bin, and Homebrew).
+- **Neovim**: `only_neovim` selects `neovim`; `only_vim` continues to select the independent awesome-vimrc `vim` component. Both run by default and use separate config/data directories and commands. Linux builds a compatible Neovim if necessary; Homebrew provides macOS Neovim. The shared `files/nvim/highlight.sh` installs Rust/Cargo if missing, tree-sitter-cli, Lazy plugins, and all supported parsers. Go development/Mason tools still need a Go toolchain.
+- **Bundled config**: `files/nvim` contains source configuration only. Custom Go-template parsers are generated on the target. `files/nvim-lazy-lock.json` seeds new installs without overwriting user plugin updates. Keep the upstream grammar license and provenance in `files/nvim/README.md`.
 - **Facts, not bare vars**: use `ansible_facts['distribution']` / `['env']['HOME']` / `['user_id']` / `['user_gid']` — bare `ansible_*` fact vars are deprecated (removal in ansible-core 2.24).
 - **Parrot vs Kali terminal split**: Parrot uses MATE terminal dconf dumps (needs D-Bus; Xvfb started only under Molecule/GitHub Actions). Kali is a plain XFCE `terminalrc` copy, dark/light chosen by `dark_mode`.
 

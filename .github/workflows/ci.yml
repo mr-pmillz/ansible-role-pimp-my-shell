@@ -42,8 +42,16 @@ jobs:
           python3 -m pip install --upgrade pip
           python3 -m pip install molecule "molecule-plugins[docker]" ansible ansible-core ansible-lint docker psutil yamllint
 
-      - name: Run Molecule converge
-        run: molecule converge
+      - name: Validate Molecule configuration
+        run: |
+          molecule --version
+          molecule --debug list
+          molecule --debug syntax
+
+      - name: Run Molecule converge and verify
+        run: |
+          molecule converge
+          molecule verify
         env:
           PY_COLORS: '1'
           ANSIBLE_FORCE_COLOR: '1'

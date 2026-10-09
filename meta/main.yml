@@ -7,7 +7,7 @@ galaxy_info:
   description: >-
     Terminal customization for Ubuntu, Debian, Linux Mint, Kali, Parrot,
     and macOS (amd64/arm64) — oh-my-zsh + powerlevel10k, oh-my-tmux + TPM,
-    awesome-vimrc, bat, fzf, MesloLGS Nerd Fonts, and per-OS terminal profiles.
+    awesome-vimrc, Neovim + LazyVim, bat, fzf, MesloLGS Nerd Fonts, and per-OS terminal profiles.
   company: Black Hills Information Security
   license: Apache-2.0
 
@@ -31,6 +31,7 @@ galaxy_info:
     - powerlevel10k
     - tmux
     - vim
+    - neovim
     - dotfiles
     - shell
     - macos
