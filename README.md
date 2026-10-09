@@ -425,6 +425,19 @@ deactivate
 
 The Linux Mint image is published for amd64 only; on an arm64 host it needs qemu/binfmt emulation (`docker run --privileged tonistiigi/binfmt --install amd64`). All other images are multi-arch.
 
+Molecule pulls the official Debian and Ubuntu base images from
+[Docker's public ECR repository](https://aws.amazon.com/blogs/containers/docker-official-images-now-available-on-amazon-elastic-container-registry-public/)
+to avoid Docker Hub's unauthenticated pull quota on shared CI runners. Both the
+scenario image references and Dockerfile `FROM` lines use that registry. These
+public pulls need no AWS account or registry credentials.
+
+Kali, Parrot, and Mint still use their upstream Docker Hub repositories. A
+`toomanyrequests: You have reached your unauthenticated pull rate limit` error
+during `molecule create` is a registry download failure before the role runs.
+If it affects one of those images locally, authenticate with `docker login`
+and retry. CI authentication, if added later, should use a read-only Docker Hub
+token and keep credentials out of pull-request jobs.
+
 ### CI security and action updates
 
 CI uses GitHub-hosted runners, read-only repository permissions, and full commit

@@ -9,14 +9,15 @@ driver:
   name: docker
 platforms:
   - name: ubuntu-pimp-my-shell
-    image: ubuntu:latest
+    # Docker's official public mirror avoids Docker Hub's anonymous pull quota.
+    image: public.ecr.aws/docker/library/ubuntu:latest
     privileged: true
     pre_build_image: false
     dockerfile: Dockerfile.ubuntu
     env:
       USER: root
   - name: debian-pimp-my-shell
-    image: debian:stable
+    image: public.ecr.aws/docker/library/debian:stable
     privileged: true
     pre_build_image: false
     dockerfile: Dockerfile.debian
