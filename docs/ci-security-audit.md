@@ -61,6 +61,10 @@ Controls: The triggers are `push` to `main` and `pull_request`; there is no
 interpolation in shell commands, shared artifact/cache consumption, secret
 reference, or OIDC request. Workflow permissions are `contents: read`.
 Concurrency expressions are evaluated as metadata, not passed to a shell.
+The image-download step uses the existing public registry references through
+`community.docker.docker_image_pull`, with bounded retries and a 30-minute step
+timeout. It adds no registry secrets, shell interpolation, or daemon configuration
+changes. Molecule builds reuse those downloaded images with `pull: false`.
 Reference: audit taxonomy sections 1.1–1.5, 2, and 3.
 
 ### [INFO, remaining] Test dependencies and containers resolve live upstream content

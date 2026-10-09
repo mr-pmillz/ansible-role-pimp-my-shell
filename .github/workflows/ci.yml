@@ -39,7 +39,9 @@ jobs:
           python -m pip check
 
       - name: Install galaxy requirements
-        run: ansible-galaxy install -r requirements.yml
+        run: |
+          ansible-galaxy install -r requirements.yml
+          ansible-galaxy collection install -r molecule/default/requirements.yml
 
       - name: Lint with yamllint
         run: yamllint . --format github
@@ -96,6 +98,10 @@ jobs:
           molecule --version
           molecule --debug list
           molecule --debug syntax
+
+      - name: Download Molecule base images with retries
+        timeout-minutes: 30
+        run: ansible-playbook -i localhost, molecule/default/pull.yml
 
       - name: Run Molecule converge and verify
         run: |

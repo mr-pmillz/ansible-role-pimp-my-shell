@@ -1,0 +1,22 @@
+---
+- name: Download Molecule base images before building
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    molecule_image_platforms: >-
+      {{ (lookup('ansible.builtin.file', playbook_dir ~ '/molecule.yml') | from_yaml).platforms }}
+  tasks:
+    - name: Pull current base images with retries for registry outages
+      community.docker.docker_image_pull:
+        name: "{{ item.image }}"
+        platform: "{{ item.platform | default(omit) }}"
+        pull: always
+        timeout: 300
+      loop: "{{ molecule_image_platforms }}"
+      loop_control:
+        label: "{{ item.image }} ({{ item.platform | default('native architecture') }})"
+      register: molecule_image_pull
+      until: molecule_image_pull is succeeded
+      retries: 5
+      delay: 60

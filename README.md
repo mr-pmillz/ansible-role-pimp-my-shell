@@ -404,6 +404,7 @@ python -m pip install --upgrade pip
 python -m pip install molecule "molecule-plugins[docker]" ansible ansible-core ansible-lint docker psutil yamllint
 python -m pip check
 ansible-galaxy install -r requirements.yml
+ansible-galaxy collection install -r molecule/default/requirements.yml
 yamllint .
 ansible-lint
 bash tests/highlight.sh
@@ -417,6 +418,7 @@ NVIM_HIGHLIGHT_SETUP=1 nvim --headless -i NONE -c 'luafile tests/pickers.lua'
 NVIM_HIGHLIGHT_SETUP=1 nvim --headless -i NONE -c 'luafile tests/health.lua'
 molecule --debug list # Validate scenario/driver configuration without creating containers
 molecule --debug syntax # Check role discovery and converge playbook syntax
+ansible-playbook -i localhost, molecule/default/pull.yml # Refresh base images with download retries
 molecule converge   # Ubuntu, Debian, Kali, Parrot, and Mint containers
 molecule verify     # Both editors, template highlighting, and repeat-run checks
 molecule destroy
@@ -431,9 +433,20 @@ to avoid Docker Hub's unauthenticated pull quota on shared CI runners. Both the
 scenario image references and Dockerfile `FROM` lines use that registry. These
 public pulls need no AWS account or registry credentials.
 
+CI downloads all five base images before building, using `pull.yml` above. Each
+failed download gets up to five retries, waiting 60 seconds between attempts.
+The playbook reads the image names and architectures from `molecule.yml` and
+checks for newer images even when a local copy exists. Molecule then builds with
+`pull: false`, so a successful download is reused without another forced registry
+request. Run the same pull command before local container tests to refresh their
+base images. CI limits the download step to 30 minutes and stops if it fails.
+
 Kali, Parrot, and Mint still use their upstream Docker Hub repositories. A
 `toomanyrequests: You have reached your unauthenticated pull rate limit` error
-during `molecule create` is a registry download failure before the role runs.
+during image downloads is a registry failure before the role runs. Docker Hub
+authentication timeouts such as `Client.Timeout exceeded while awaiting headers`
+are also download failures; the retries can recover from a temporary outage,
+but cannot bypass an exhausted quota or a prolonged registry outage.
 If it affects one of those images locally, authenticate with `docker login`
 and retry. CI authentication, if added later, should use a read-only Docker Hub
 token and keep credentials out of pull-request jobs.

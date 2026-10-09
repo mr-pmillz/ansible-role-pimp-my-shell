@@ -11,6 +11,8 @@ platforms:
   - name: ubuntu-pimp-my-shell
     # Docker's official public mirror avoids Docker Hub's anonymous pull quota.
     image: public.ecr.aws/docker/library/ubuntu:latest
+    # pull.yml refreshes base images with retries before the build phase.
+    pull: false
     privileged: true
     pre_build_image: false
     dockerfile: Dockerfile.ubuntu
@@ -18,6 +20,7 @@ platforms:
       USER: root
   - name: debian-pimp-my-shell
     image: public.ecr.aws/docker/library/debian:stable
+    pull: false
     privileged: true
     pre_build_image: false
     dockerfile: Dockerfile.debian
@@ -25,6 +28,7 @@ platforms:
       USER: root
   - name: kali-pimp-my-shell
     image: kalilinux/kali-rolling:latest
+    pull: false
     privileged: true
     pre_build_image: false
     dockerfile: Dockerfile.kali
@@ -32,6 +36,7 @@ platforms:
       USER: root
   - name: parrot-pimp-my-shell
     image: parrotsec/core:latest
+    pull: false
     privileged: true
     pre_build_image: false
     dockerfile: Dockerfile.parrot
@@ -39,6 +44,7 @@ platforms:
       USER: root
   - name: mint-pimp-my-shell
     image: linuxmintd/mint22-amd64:latest
+    pull: false
     # Only published for amd64, so it is pinned explicitly and needs binfmt/qemu
     # emulation (`docker run --privileged tonistiigi/binfmt --install amd64`) to run
     # on an arm64 host. Every other platform here is a multi-arch image and runs natively.
