@@ -7,3 +7,6 @@ __pycache__/
 .vscode/
 .idea/
 *.deb
+
+# Local settings copied or renamed from playbook.example.yml
+/playbook.yml

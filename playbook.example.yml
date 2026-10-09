@@ -1,0 +1,24 @@
+# code: language=ansible
+---
+# From this checkout:
+#   ansible-galaxy install -r requirements.yml
+#   mv playbook.example.yml playbook.yml
+#   ansible-playbook playbook.yml -K
+# Add -e only_neovim=true to install Neovim alongside an existing Vim setup.
+- name: Configure the local user's shell and editors
+  hosts: localhost
+  connection: local
+  gather_facts: true
+  # Run as your normal user; the role elevates individual system tasks as needed.
+  become: false
+  vars:
+    dark_mode: true
+    # No only_* flags means all components, including both Vim and Neovim.
+    # Uncomment any combination here, or pass the same flags with -e:
+    # only_vim: true
+    # only_neovim: true
+    # only_nerdfonts: true
+    # only_tmux: true
+  roles:
+    # Use this checkout, regardless of its directory name or Galaxy installation.
+    - role: "{{ playbook_dir }}"

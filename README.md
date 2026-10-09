@@ -44,6 +44,39 @@ Neovim requires **0.12+ with LuaJIT** for the bundled Tree-sitter plugin revisio
 ansible-galaxy install -r requirements.yml
 ```
 
+## Localhost quick start
+
+With Ansible installed, use the included [playbook.example.yml](playbook.example.yml)
+to configure the current user on localhost directly from this checkout:
+
+```bash
+git clone https://github.com/mr-pmillz/ansible-role-pimp-my-shell.git
+cd ansible-role-pimp-my-shell
+ansible-galaxy install -r requirements.yml
+mv playbook.example.yml playbook.yml
+
+# Install all components, including both Vim and Neovim.
+ansible-playbook playbook.yml -K
+```
+
+If you already have this checkout, start with the dependency installation. Run the
+playbook as your normal user; the role requests sudo only for system tasks. `-K`
+prompts for your sudo password; omit it with passwordless sudo or on macOS when
+running the user-level Homebrew setup. The playbook uses `{{ playbook_dir }}` to
+load this checkout directly, so no role installation or path editing is needed.
+Your local `playbook.yml` is ignored by Git.
+
+To add only Neovim alongside an existing awesome-vimrc installation, use this
+instead of the all-components command:
+
+```bash
+ansible-playbook playbook.yml -K -e only_neovim=true
+```
+
+The example enables `dark_mode: true`. Edit `playbook.yml` for persistent settings,
+or use the [selection flags](#selective-installation) below to choose components
+for each run. You can also run `playbook.example.yml` directly without renaming it.
+
 ## Role variables
 
 Defaults from `defaults/main.yml`:
@@ -75,7 +108,7 @@ By default every component runs. Setting any `only_*` flag narrows the run to ju
 | `only_bashrc` | `~/.bashrc` |
 | `only_terminal_profiles` | OS-specific terminal profiles |
 
-Run these against the example `playbook.yml` below (omit `-K` when sudo does not require a password):
+After the [localhost quick start](#localhost-quick-start), run any of these commands (omit `-K` when sudo does not require a password):
 
 ```bash
 # Install everything, including both Vim and Neovim.
@@ -170,7 +203,10 @@ References: [LazyVim requirements](https://www.lazyvim.org/),
 [nvim-treesitter main API](https://github.com/nvim-treesitter/nvim-treesitter/blob/main/README.md),
 [Tree-sitter CLI installation](https://github.com/tree-sitter/tree-sitter/blob/master/crates/cli/README.md).
 
-## Example playbook
+## Use the role from another project
+
+For a checkout on localhost, use the [included example](playbook.example.yml) above.
+For a separate Ansible project, install the role with Galaxy and use this playbook:
 
 ```yaml
 ---
@@ -181,12 +217,6 @@ References: [LazyVim requirements](https://www.lazyvim.org/),
     - role: mr_pmillz.pimp_my_shell
       dark_mode: true
 ```
-
-To use this checkout directly, replace `mr_pmillz.pimp_my_shell` in the playbook
-with the absolute path to the checkout (for example,
-`/home/you/projects/ansible-role-pimp-my-shell`). The same `only_*` commands above
-then run your local changes. Install the role's Galaxy dependencies first with
-`ansible-galaxy install -r requirements.yml` from this checkout.
 
 With a `requirements.yml` in your project:
 
