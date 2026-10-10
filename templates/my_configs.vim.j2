@@ -3,15 +3,16 @@ try
     set encoding=UTF-8
     syntax enable
     filetype plugin indent on
-    " Set Dracula to the default Theme
-    " For Light mode, switch to peaksea and set background=light
-    colorscheme {{ 'dracula' if dark_mode else 'peaksea' }}
-    " Set Background to dark mode
-    " For Light mode, switch to colorscheme to peaksea and set background=light
-    set background={{ 'dark' if dark_mode else 'light' }}
-    " color peaksea
+    " Dracula options MUST be set before `colorscheme dracula` is loaded;
+    " the colorscheme reads them at load time. colorterm=0 keeps the
+    " terminal's own background instead of dracula's #282A36.
     let g:dracula_colorterm = 0
     let g:dracula_italic = 0
+    " Set Background to dark mode, then load Dracula as the default theme
+    " For Light mode, switch to colorscheme peaksea and set background=light
+    set background=dark
+    colorscheme dracula
+    " color peaksea
     " Show Line Numbers
     set nu
 
@@ -151,8 +152,8 @@ try
       \   'buffers': 'tabsel'
       \ }
       \ }
-    if
-        has('gui_running') set guioptions-=e
+    if has('gui_running')
+        set guioptions-=e
     endif
 
     let g:lightline#bufferline#clickable = 1
@@ -180,3 +181,4 @@ try
     let g:pathogen_blacklist = ['vim-multiple-cursors']
 catch
 endtry
+
