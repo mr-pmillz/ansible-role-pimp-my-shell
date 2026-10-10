@@ -33,12 +33,5 @@
     - src: "{{ role_path }}/files/zsh/man-pages.zsh"
       dest: "{{ ansible_facts['env']['HOME'] }}/.oh-my-zsh/custom/man-pages.zsh"
 
-- name: Update .zshrc configuration
-  vars:
-    prepend_data: "{{ lookup('ansible.builtin.file', role_path + '/files/zsh/zshrc_prepend.zsh') }}"
-    append_data: "{{ lookup('ansible.builtin.file', role_path + '/files/zsh/zshrc_append.zsh') }}"
-  ansible.builtin.template:
-    src: templates/zshrc.j2
-    dest: "{{ ansible_facts['env']['HOME'] }}/.zshrc"
-    mode: "0644"
-    backup: true
+- name: Merge .zshrc configuration
+  ansible.builtin.include_tasks: zshrc.yml

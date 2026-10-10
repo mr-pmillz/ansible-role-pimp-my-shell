@@ -52,5 +52,5 @@ Molecule Dockerfiles are deliberately minimal (python3/sudo/desktop terminal onl
 
 - `.bashrc` is a static copy (not templated), so `dark_mode` has no effect on bash sessions.
 - `only_*` flags are independent, not dependency-resolved: `only_vim` won't pull in `nerdfonts`; `only_zsh` still assumes oh-my-zsh exists (meta dep on Linux / bootstrap on macOS provides it).
-- The gantsign.oh-my-zsh meta dependency must use the same zsh selection gate as the parent role, or it can overwrite .zshrc during Neovim-only runs. Both the dependency and the parent Zsh template keep backups.
+- The gantsign.oh-my-zsh meta dependency uses the same zsh selection gate as the parent and forces every user's `write_zshrc` false. The macOS installer uses `--keep-zshrc`. `tasks/zshrc.yml` backs up and merges a single marked block, preserves existing content and permissions, validates syntax, and suppresses secrets in logs/diffs. Keep user additions outside the markers. `tests/zshrc.py` exercises preservation, updates, startup, and backups.
 - The Xvfb tasks fire-and-forget (`async: 10, poll: 0`); on real desktops the `dbus-run-session -- dconf load` works headlessly regardless.

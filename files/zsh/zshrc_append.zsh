@@ -1,4 +1,5 @@
 # zsh-syntax-highlighting colors
+typeset -gA ZSH_HIGHLIGHT_STYLES
 ZSH_HIGHLIGHT_HIGHLIGHTERS=(main brackets pattern)
 ZSH_HIGHLIGHT_STYLES[default]=none
 ZSH_HIGHLIGHT_STYLES[unknown-token]=fg=white,underline
@@ -48,15 +49,31 @@ ZSH_HIGHLIGHT_STYLES[cursor-matchingbracket]=standout
 # Add ~/go/bin to path
 [[ ":$PATH:" != *":${HOME}/go/bin:"* ]] && export PATH="${PATH}:${HOME}/go/bin"
 # Set GOPATH
-if [[ -z "${GOPATH}" ]]; then export GOPATH="${HOME}/go"; fi
+if [[ -z "${GOPATH:-}" ]]; then export GOPATH="${HOME}/go"; fi
 [[ ":$PATH:" != *":/usr/local/go/bin:"* ]] && export PATH="${PATH}:/usr/local/go/bin"
 
 # Set CTRL+U to only delete backwards to the left of the cursor.
 bindkey \^U backward-kill-line
+bindkey "\033[1~" beginning-of-line
+bindkey "\033[4~" end-of-line
 
 # Preserve TERM supplied by the terminal or tmux; overriding it here breaks
 # terminfo and makes Neovim report a tmux/default-terminal mismatch.
 
 # To customize prompt, run `p10k configure` or edit ~/.p10k.zsh.
-[[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
-POWERLEVEL9K_INSTANT_PROMPT=quiet
+if [[ "${ZSH_THEME:-}" == powerlevel10k/powerlevel10k && -f "$HOME/.p10k.zsh" ]]; then
+  source "$HOME/.p10k.zsh"
+fi
+: "${POWERLEVEL9K_INSTANT_PROMPT:=quiet}"
+
+export CLAUDE_CODE_DISABLE_ALTERNATE_SCREEN=1
+export CLAUDE_CODE_DISABLE_MOUSE_CLICKS=1
+
+if [ -z "${SSH_AUTH_SOCK:-}" ]; then
+  eval "$(ssh-agent -s)"
+fi
+
+# Load local secret keys if the file exists
+if [ -f "$HOME/.zsh_secrets" ]; then
+  source "$HOME/.zsh_secrets"
+fi

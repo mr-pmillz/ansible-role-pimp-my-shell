@@ -72,9 +72,9 @@ oh_my_zsh_update_mode: reminder
 # The value 0 will check every time a new shell session starts.
 oh_my_zsh_update_frequency: 7
 
-# Whether to write the ~/.zshrc file
-# May be overridden by `oh_my_zsh: write_zshrc:` under each user.
-oh_my_zsh_write_zshrc: true
+# The dependency's whole-file template is disabled for every user in meta/main.yml.
+# This role instead backs up .zshrc and merges its own managed block.
+oh_my_zsh_write_zshrc: false
 
 # default dark_mode to false
 dark_mode: false

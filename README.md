@@ -4,7 +4,7 @@
 
 Pimp your terminal on Linux and macOS. This role configures:
 
-- **zsh** — [oh-my-zsh](https://ohmyz.sh/) with [powerlevel10k](https://github.com/romkatv/powerlevel10k), zsh-autosuggestions, zsh-syntax-highlighting, curated aliases, and a templated `~/.zshrc`
+- **zsh** — [oh-my-zsh](https://ohmyz.sh/) with [powerlevel10k](https://github.com/romkatv/powerlevel10k), zsh-autosuggestions, zsh-syntax-highlighting, curated aliases, and settings merged into your existing `~/.zshrc`
 - **Nerd Fonts** — the four MesloLGS NF faces powerlevel10k recommends
 - **tmux** — [oh-my-tmux](https://github.com/gpakosz/.tmux) plus [TPM](https://github.com/tmux-plugins/tpm) with plugins pre-installed
 - **Vim** — [awesome-vimrc](https://github.com/amix/vimrc) with YouCompleteMe, vim-go, vim-airline, fzf.vim, and the existing `dark_mode`-aware configuration
@@ -86,12 +86,36 @@ The example enables `dark_mode: true`. Edit `playbook.yml` for persistent settin
 or use the [selection flags](#selective-installation) below to choose components
 for each run. You can also run `playbook.example.yml` directly without renaming it.
 
+### Preserving your Zsh configuration
+
+Zsh setup appends one marked `pimp-my-shell` block to `~/.zshrc`. Later runs
+update that block while preserving all content outside it, including environment
+variables, API keys, functions, comments, and aliases. Keep personal additions
+outside the `BEGIN`/`END ANSIBLE MANAGED BLOCK: pimp-my-shell` markers; additions
+after the block can override role settings. Existing custom themes and plugin
+lists are retained, and missing role plugins are added without initializing Oh
+My Zsh twice. An unset theme or the stock `robbyrussell` theme uses the role's
+configured theme.
+
+The Linux dependency's whole-file `.zshrc` template is disabled, including old
+per-user `write_zshrc` overrides. The macOS installer keeps an existing `.zshrc`.
+Before changing an existing file, the merge creates an Ansible backup, preserves
+its permissions, and validates Zsh syntax. New files use mode `0600`. File content
+and diffs are suppressed in Ansible output to avoid displaying embedded secrets.
+
+The managed block also sets `CLAUDE_CODE_DISABLE_ALTERNATE_SCREEN=1` and
+`CLAUDE_CODE_DISABLE_MOUSE_CLICKS=1`, starts `ssh-agent` only when `SSH_AUTH_SOCK`
+is empty, and sources `~/.zsh_secrets` if it exists. The role does not create or
+modify that secrets file.
+Ctrl+U deletes back to the beginning of the line; the `Esc [ 1 ~` and `Esc [ 4 ~`
+Home/End sequences move to the beginning/end of the line.
+
 ### Restoring an overwritten Zsh configuration
 
 Older versions ran the Oh My Zsh dependency even during `only_neovim=true` and
 could overwrite an existing `~/.zshrc`. Neovim-only runs now skip that dependency
-and all Zsh tasks. Runs that select Zsh intentionally manage `.zshrc`; both the
-dependency and this role's Zsh template keep Ansible backups when changing it.
+and all Zsh tasks. Runs that select Zsh now merge the managed block described
+above and keep Ansible backups when changing an existing file.
 
 List the backups on the affected machine:
 
@@ -123,7 +147,7 @@ ansible-playbook playbook.yml -K -e only_zsh=true \
 exec zsh
 ```
 
-The Powerlevel10k command rebuilds the managed configuration; it cannot recover
+The Powerlevel10k command adds or updates the managed block; it cannot recover
 customizations from a lost original file. The role's Zsh snippet now preserves
 the terminal's existing `TERM` value, including `tmux-256color` inside tmux.
 
@@ -139,11 +163,11 @@ Defaults from `defaults/main.yml`:
 | `go_install_dir` | `~/.local/share/go` | Parent directory for versioned Go installations |
 | `dark_mode` | `false` | Dark theme for bat, Vim, and terminal profiles (LazyVim keeps its default theme) |
 | `oh_my_zsh_users` | `[{username: <ansible_user_id>}]` | Users passed to gantsign.oh-my-zsh on Linux |
-| `oh_my_zsh_theme` | `powerlevel10k/powerlevel10k` | zsh theme |
-| `oh_my_zsh_plugins` | `[ansible, git, golang, docker, …]` | oh-my-zsh plugins to load |
+| `oh_my_zsh_theme` | `powerlevel10k/powerlevel10k` | Theme for unset or stock `robbyrussell` configurations; existing custom themes are retained |
+| `oh_my_zsh_plugins` | `[ansible, git, golang, docker, …]` | Plugins to add to the user's existing list |
 | `oh_my_zsh_update_mode` | `reminder` | `disabled`, `auto`, or `reminder` |
 | `oh_my_zsh_update_frequency` | `7` | Days between oh-my-zsh update checks |
-| `oh_my_zsh_write_zshrc` | `true` | Whether gantsign.oh-my-zsh writes an initial `~/.zshrc` |
+| `oh_my_zsh_write_zshrc` | `false` | Legacy dependency setting; whole-file writes are always disabled in favor of the managed merge |
 
 ### Selective installation
 
@@ -551,6 +575,7 @@ ansible-lint
 bash tests/highlight.sh
 python tests/upgrades.py
 python tests/selection.py
+python tests/zshrc.py  # Requires zsh; uses temporary files and a mock SSH agent.
 python tests/kitty.py
 python tests/fzf.py
 python tests/go.py

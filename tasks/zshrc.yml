@@ -1,0 +1,25 @@
+---
+- name: Read existing .zshrc permissions
+  ansible.builtin.stat:
+    path: "{{ ansible_facts['env']['HOME'] }}/.zshrc"
+    follow: true
+    get_checksum: false
+    get_mime: false
+  register: pimp_my_shell_zshrc
+
+- name: Append or update the role's .zshrc block
+  vars:
+    prepend_data: "{{ lookup('ansible.builtin.file', role_path + '/files/zsh/zshrc_prepend.zsh') }}"
+    append_data: "{{ lookup('ansible.builtin.file', role_path + '/files/zsh/zshrc_append.zsh') }}"
+  ansible.builtin.blockinfile:
+    path: "{{ ansible_facts['env']['HOME'] }}/.zshrc"
+    marker: "# {mark} ANSIBLE MANAGED BLOCK: pimp-my-shell"
+    insertafter: EOF
+    block: "{{ lookup('ansible.builtin.template', role_path + '/templates/zshrc.j2') }}"
+    create: true
+    mode: "{{ pimp_my_shell_zshrc.stat.mode | default('0600') }}"
+    backup: true
+    validate: zsh -f -n %s
+  # Existing content may contain credentials, including with --diff or -vvv.
+  diff: false
+  no_log: true

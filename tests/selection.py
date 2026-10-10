@@ -25,12 +25,25 @@ def check_selection(root: Path) -> None:
     (roles / "gantsign.oh-my-zsh/tasks").mkdir(parents=True)
     dependency = [
         {
+            "name": "Record dependency inputs",
+            "ansible.builtin.copy": {
+                "content": "{{ users | to_json }}",
+                "dest": "{{ ansible_facts['env']['HOME'] }}/.dependency-users",
+                "mode": "0600",
+            },
+        },
+        {
             "name": "Simulate the shell dependency's write",
             "ansible.builtin.copy": {
                 "content": "dependency ran\n",
                 "dest": "{{ ansible_facts['env']['HOME'] }}/.zshrc",
                 "mode": "0644",
             },
+            "loop": "{{ users }}",
+            "when": (
+                "(item.oh_my_zsh | default({})).write_zshrc "
+                "| default(oh_my_zsh_write_zshrc)"
+            ),
         }
     ]
     (roles / "gantsign.oh-my-zsh/tasks/main.yml").write_text(yaml.safe_dump(dependency))
@@ -57,6 +70,20 @@ def check_selection(root: Path) -> None:
         ("both editors", {"only_vim": True, "only_neovim": True}, False),
         ("neovim and zsh", {"only_neovim": True, "only_zsh": True}, True),
         ("default selects everything", {}, True),
+        (
+            "legacy write override",
+            {
+                "only_zsh": True,
+                "oh_my_zsh_write_zshrc": True,
+                "oh_my_zsh_users": [
+                    {
+                        "username": "fixture",
+                        "oh_my_zsh": {"write_zshrc": True, "theme": "custom"},
+                    }
+                ],
+            },
+            True,
+        ),
     ]
     for name, flags, shell_selected in cases:
         userdir = root / name.replace(" ", "-")
@@ -99,8 +126,14 @@ def check_selection(root: Path) -> None:
             },
         )
         assert result.returncode == 0, result.stdout + result.stderr
-        expected = "dependency ran\n" if shell_selected else "existing customization\n"
-        assert (userdir / ".zshrc").read_text() == expected, name
+        assert (userdir / ".zshrc").read_text() == "existing customization\n", name
+        dependency_users = userdir / ".dependency-users"
+        assert dependency_users.exists() == shell_selected, name
+        if shell_selected:
+            users = yaml.safe_load(dependency_users.read_text())
+            assert all(user["oh_my_zsh"]["write_zshrc"] is False for user in users)
+            if name == "legacy write override":
+                assert users[0]["oh_my_zsh"]["theme"] == "custom"
         if name in ("neovim only", "kitty only", "kitty and tmux"):
             for filename in protected:
                 assert (
