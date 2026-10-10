@@ -21,6 +21,27 @@
       ansible.builtin.command: vim --version
       changed_when: false
 
+    - name: Read the vim-go binary directory
+      ansible.builtin.command: go env -json GOBIN GOPATH
+      register: vim_go_verify_environment
+      changed_when: false
+
+    - name: Verify installed vim-go tools contain Go build metadata
+      ansible.builtin.command:
+        argv:
+          - go
+          - version
+          - -m
+          - "{{ vim_go_verify_bin_dir }}/{{ item.key }}"
+      vars:
+        vim_go_verify_bin_dir: >-
+          {{ (vim_go_verify_environment.stdout | from_json).GOBIN or
+             ((vim_go_verify_environment.stdout | from_json).GOPATH.split(':')[0] + '/bin') }}
+      loop: "{{ vim_go_tools | dict2items }}"
+      loop_control:
+        label: "{{ item.key }}"
+      changed_when: false
+
     - name: Check separate editor configurations
       ansible.builtin.stat:
         path: "{{ ansible_facts['env']['HOME'] }}/{{ item }}"

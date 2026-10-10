@@ -225,6 +225,32 @@ ansible-galaxy collection install -r requirements.yml --upgrade
 
 Flags are independent — `only_neovim` does not pull in `only_nerdfonts`, even though the Neovim config renders glyphs that want a Nerd Font. Advanced callers can bypass the flags by passing `pimp_my_shell_components` directly as a role parameter, e.g. `pimp_my_shell_components: [neovim, tmux]`. Vim and Neovim are separate components; a default run installs both.
 
+## Vim Go tools
+
+The Vim component installs vim-go's 15 helper programs with individual `go install`
+tasks. Cold builds of tools such as `gopls` and `golangci-lint` can take several
+minutes. Ansible reports the tool name and polls every 10 seconds while it builds;
+failed commands report their compiler or download errors and stop the installation.
+Each build has a deadline, and builds run on one host at a time to avoid exhausting
+the shared CI runner when Molecule tests multiple distributions.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `vim_go_install_timeout` | `900` | Maximum seconds allowed per tool build |
+| `vim_go_build_jobs` | `2` | Parallel build jobs and Go runtime CPU limit per build |
+| `vim_go_tools` | vim-go's 15 tools | Dictionary of executable names to Go package/version references; see `defaults/main.yml` |
+
+Tools go into `go env GOBIN`, or the first `go env GOPATH` entry's `bin` directory
+when GOBIN is empty (normally `~/go/bin`). Normal reruns check actual executables
+and repair missing tools; they no longer trust `vim_go_is_installed.txt`. Existing
+tools are upgraded only with `upgrade_components=true`.
+
+For a slower machine, allow more time per tool while installing only Vim:
+
+```bash
+ansible-playbook playbook.yml -K -e only_vim=true -e vim_go_install_timeout=1800
+```
+
 ## Neovim and highlighting
 
 The role bundles the customized Lua configuration and language extras from the local
@@ -255,6 +281,89 @@ Existing unrelated configuration files are preserved. Remove any existing custom
 colorscheme plugin yourself if migrating another configuration to the default theme.
 `install_prerequisites: false` assumes compatible Neovim, Go, fzf, and system build tools
 already exist; the user-local Rust/Cargo and plugin setup still runs.
+
+### Useful hotkeys for power users
+
+These shortcuts apply to the bundled LazyVim configuration, which uses Neo-tree
+for the sidebar and fzf-lua for search. Press `Esc` to enter normal mode first.
+`Space` is the leader key: `Space → e` means press the keys in sequence;
+`Ctrl+h` means hold Ctrl while pressing h. Uppercase letters require Shift.
+
+#### Sidebar and tabs
+
+| Action | Keys |
+|--------|------|
+| Toggle the file sidebar | `Space → e` |
+| Open the selected sidebar file in a **new tab**, keeping the current tab | Lowercase `t` while focused in Neo-tree |
+| Open the selected sidebar file in the current editor pane | `Enter` while focused in Neo-tree |
+| Create an empty tab | `Space → Tab → Tab` |
+| Go to the next tab | `gt` or `Space → Tab → ]` |
+| Go to the previous tab | `gT` or `Space → Tab → [` |
+| Close the current tab | `Space → Tab → d` |
+
+To keep your current file in its own tab, open the sidebar with
+`Space → e`, highlight another file, and press **`t`**. Use `gt` and `gT` to
+switch between the tabs. You can also run `:tabedit path/to/file` followed by
+`Enter` to open a file directly in a new tab.
+
+#### Panes and splits
+
+| Action | Keys |
+|--------|------|
+| Move focus to the pane on the left | `Ctrl+h` |
+| Move focus to the pane on the right | `Ctrl+l` |
+| Move focus to the pane below | `Ctrl+j` |
+| Move focus to the pane above | `Ctrl+k` |
+| Split the editor to the right | `Space → \|` |
+| Split the editor below | `Space → -` |
+| Close the focused pane | `Space → w → d` |
+| Toggle zoom for the focused pane | `Space → w → m` |
+
+With the sidebar on the left and the editor on the right, `Ctrl+l` moves into
+the editor and `Ctrl+h` returns to the sidebar. These shortcuts move between
+Neovim panes; tmux panes have their own bindings.
+
+#### Search and open files
+
+| Action | Keys |
+|--------|------|
+| Find a file by name | `Space → Space` |
+| Search text across files | `Space → /` |
+| Pick an already-open file (buffer) | `Space → ,` |
+| Show the previous / next open buffer | `Shift+H` / `Shift+L` |
+| Switch back to the previously edited buffer | `Space → b → b` |
+| Close the current buffer | `Space → b → d` |
+| Save the current file | `Ctrl+s` |
+| Search available key mappings | `Space → s → k` |
+
+Files remain open as buffers when you switch files in the same pane. A tab holds
+its own arrangement of panes. This configuration disables bufferline's visual
+file bar; use `Space → ,` to see open buffers. Inside the fzf picker, `Ctrl+t`
+opens Trouble's results list. To open a sidebar file in a new tab, use Neo-tree's
+`t` mapping above.
+
+#### Code navigation and editing
+
+Language-server actions require a server attached to the current file and support
+for the requested action; formatting requires a configured formatter.
+
+| Action | Keys |
+|--------|------|
+| Jump to the symbol's definition | `gd` |
+| Find references to the symbol | `gr` |
+| Show documentation for the symbol | `K` |
+| Rename the symbol | `Space → c → r` |
+| Choose a code action or suggested fix | `Space → c → a` |
+| Format the file | `Space → c → f` |
+| Jump to the next / previous diagnostic | `]d` / `[d` |
+| Open LazyGit for the current repository | `Space → g → g` |
+
+Press `Space` and pause to see the available shortcut groups, or press
+`Space → Tab` and pause for the tab menu. See the
+[LazyVim keymap reference](https://www.lazyvim.org/keymaps) and
+[Neo-tree mappings](https://github.com/nvim-neo-tree/neo-tree.nvim#quickstart)
+for more; the tables above account for this role's sidebar, picker, and bufferline
+settings.
 
 ### File and text search on Mint/Ubuntu
 
@@ -412,6 +521,9 @@ python tests/upgrades.py
 python tests/selection.py
 python tests/fzf.py
 python tests/go.py
+python tests/vim_go.py
+# Optional: build all vim-go tools in temporary directories (downloads required).
+python tests/vim_go.py --real
 # After provisioning a test Neovim config and its custom parsers:
 nvim --headless -u NONE -i NONE -l tests/neovim.lua
 NVIM_HIGHLIGHT_SETUP=1 nvim --headless -i NONE -c 'luafile tests/pickers.lua'

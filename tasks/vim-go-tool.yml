@@ -1,0 +1,24 @@
+---
+# Serializing builds across hosts avoids five concurrent compiler workloads
+# exhausting the shared Molecule runner's CPU and memory. Each tool is a
+# separate task so a failure stops immediately and identifies the package.
+- name: Install vim-go tool {{ vim_go_tool.item.key }}
+  ansible.builtin.command:
+    argv:
+      - go
+      - install
+      - -v
+      - -p
+      - "{{ vim_go_build_jobs | string }}"
+      - "{{ vim_go_tool.item.value }}"
+    chdir: "{{ ansible_facts['env']['HOME'] }}"
+  environment:
+    GOBIN: "{{ vim_go_bin_dir }}"
+    GO111MODULE: "on"
+    GOOS: "{{ (vim_go_environment.stdout | from_json).GOHOSTOS }}"
+    GOARCH: "{{ (vim_go_environment.stdout | from_json).GOHOSTARCH }}"
+    GOMAXPROCS: "{{ vim_go_build_jobs | string }}"
+  async: "{{ vim_go_install_timeout | int }}"
+  poll: 10
+  throttle: 1
+  changed_when: true

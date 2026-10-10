@@ -1,0 +1,92 @@
+---
+- name: Manage vim-go tools
+  environment:
+    PATH: "{{ ansible_facts['env']['HOME'] }}/.local/bin:{{ ansible_facts['env']['PATH'] }}:/usr/local/go/bin:{{ ansible_facts['env']['HOME'] }}/go/bin:/opt/homebrew/bin:/usr/local/bin"
+    GIT_TERMINAL_PROMPT: "0"
+  block:
+    # With prerequisites disabled, preserve the existing behavior of skipping
+    # vim-go tools when the user has not installed Go.
+    - name: Check if a Go toolchain is available for vim-go
+      ansible.builtin.shell: command -v go
+      args:
+        executable: /bin/bash
+      register: vim_go_toolchain
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: Install and verify vim-go tools
+      when:
+        - vim_go_toolchain.rc == 0
+        - not ansible_check_mode
+      block:
+        - name: Validate vim-go build limits
+          ansible.builtin.assert:
+            that:
+              - vim_go_install_timeout | int > 0
+              - vim_go_build_jobs | int > 0
+            fail_msg: vim_go_install_timeout and vim_go_build_jobs must be positive integers.
+
+        - name: Read the Go binary installation directory
+          ansible.builtin.command:
+            argv: [go, env, -json, GOBIN, GOPATH, GOHOSTOS, GOHOSTARCH]
+            chdir: "{{ ansible_facts['env']['HOME'] }}"
+          register: vim_go_environment
+          changed_when: false
+          async: 60
+          poll: 5
+
+        - name: Resolve the directory used by vim-go
+          ansible.builtin.set_fact:
+            vim_go_bin_dir: >-
+              {{ (vim_go_environment.stdout | from_json).GOBIN or
+                 ((vim_go_environment.stdout | from_json).GOPATH.split(':')[0] + '/bin') }}
+
+        - name: Create the Go tools directory
+          ansible.builtin.file:
+            path: "{{ vim_go_bin_dir }}"
+            state: directory
+            mode: "0755"
+
+        - name: Check installed vim-go executables
+          ansible.builtin.stat:
+            path: "{{ vim_go_bin_dir }}/{{ item.key }}"
+            follow: true
+            get_checksum: false
+          loop: "{{ vim_go_tools | dict2items }}"
+          loop_control:
+            label: "{{ item.key }}"
+          register: vim_go_existing_tools
+
+        - name: Install missing or explicitly upgraded vim-go tools
+          ansible.builtin.include_tasks: vim-go-tool.yml
+          loop: "{{ vim_go_existing_tools.results }}"
+          loop_control:
+            loop_var: vim_go_tool
+            label: "{{ vim_go_tool.item.key }} ({{ vim_go_tool.item.value }})"
+          when: upgrade_components | bool or not (vim_go_tool.stat.executable | default(false))
+
+        - name: Check resulting vim-go executables
+          ansible.builtin.stat:
+            path: "{{ vim_go_bin_dir }}/{{ item.key }}"
+            follow: true
+            get_checksum: false
+          loop: "{{ vim_go_tools | dict2items }}"
+          loop_control:
+            label: "{{ item.key }}"
+          register: vim_go_verified_tools
+
+        - name: Verify every requested vim-go tool is executable
+          ansible.builtin.assert:
+            that:
+              - item.stat.isreg | default(false)
+              - item.stat.executable | default(false)
+            fail_msg: "The vim-go installer did not create {{ vim_go_bin_dir }}/{{ item.item.key }}."
+          loop: "{{ vim_go_verified_tools.results }}"
+          loop_control:
+            label: "{{ item.item.key }}"
+
+        - name: Remove the obsolete vim-go completion marker
+          ansible.builtin.file:
+            path: "{{ ansible_facts['env']['HOME'] }}/vim_go_is_installed.txt"
+            state: absent

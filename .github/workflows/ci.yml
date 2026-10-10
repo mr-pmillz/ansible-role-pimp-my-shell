@@ -64,6 +64,9 @@ jobs:
       - name: Test Go installation and upgrade behavior
         run: python tests/go.py
 
+      - name: Test vim-go installation, failures, and timeouts
+        run: python tests/vim_go.py
+
   molecule:
     runs-on: ubuntu-latest
     timeout-minutes: 180

@@ -99,41 +99,5 @@
     mode: "0644"
   when: not vim_you_complete_me_is_installed.stat.exists
 
-# vim-go binaries are only installable when a Go toolchain is present.
-# With install_prerequisites disabled, a missing Go toolchain skips this step.
-- name: Check if a Go toolchain is available
-  ansible.builtin.shell: command -v go
-  args:
-    executable: /bin/bash
-  environment:
-    PATH: "{{ ansible_facts['env']['HOME'] }}/.local/bin:{{ ansible_facts['env']['PATH'] }}:/usr/local/go/bin:{{ ansible_facts['env']['HOME'] }}/go/bin:/opt/homebrew/bin:/usr/local/bin"
-  register: go_toolchain_check
-  changed_when: false
-  failed_when: false
-
-- name: Check if vim-go binaries were installed
-  ansible.builtin.stat:
-    path: "{{ ansible_facts['env']['HOME'] }}/vim_go_is_installed.txt"
-  register: vim_go_is_installed
-
-- name: Install vim-go binaries
-  ansible.builtin.shell: "vim +{{ 'GoUpdateBinaries' if upgrade_components | bool else 'GoInstallBinaries' }} +qa || true"
-  environment:
-    PATH: "{{ ansible_facts['env']['HOME'] }}/.local/bin:{{ ansible_facts['env']['PATH'] }}:/usr/local/go/bin:{{ ansible_facts['env']['HOME'] }}/go/bin:/opt/homebrew/bin:/usr/local/bin"
-  changed_when: true
-  when:
-    - go_toolchain_check.rc == 0
-    - >-
-      not vim_go_is_installed.stat.exists or
-      pimp_my_shell_vim_plugins.results
-      | selectattr('item.repo', 'equalto', 'https://github.com/fatih/vim-go')
-      | selectattr('changed') | list | length > 0
-
-- name: Create vim-go installed flag file
-  ansible.builtin.file:
-    path: "{{ ansible_facts['env']['HOME'] }}/vim_go_is_installed.txt"
-    state: touch
-    mode: "0644"
-  when:
-    - go_toolchain_check.rc == 0
-    - not vim_go_is_installed.stat.exists
+- name: Manage vim-go binaries without starting interactive Vim
+  ansible.builtin.include_tasks: vim-go.yml
