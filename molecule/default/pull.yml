@@ -4,9 +4,19 @@
   connection: local
   gather_facts: false
   vars:
-    molecule_image_platforms: >-
+    molecule_platform_name: "{{ lookup('ansible.builtin.env', 'MOLECULE_PLATFORM_NAME') }}"
+    molecule_all_platforms: >-
       {{ (lookup('ansible.builtin.file', playbook_dir ~ '/molecule.yml') | from_yaml).platforms }}
+    molecule_image_platforms: >-
+      {{ molecule_all_platforms | selectattr('name', 'equalto', molecule_platform_name) | list
+         if molecule_platform_name | length > 0 else molecule_all_platforms }}
   tasks:
+    - name: Verify the selected platform exists before pulling images
+      ansible.builtin.assert:
+        that:
+          - molecule_image_platforms | length > 0
+        fail_msg: "Unknown Molecule platform: {{ molecule_platform_name }}"
+
     - name: Pull current base images with retries for registry outages
       community.docker.docker_image_pull:
         name: "{{ item.image }}"

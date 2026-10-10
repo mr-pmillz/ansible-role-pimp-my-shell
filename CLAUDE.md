@@ -46,7 +46,7 @@ molecule converge       # ubuntu, debian, kali, parrot, mint containers
 molecule destroy
 ```
 
-Molecule Dockerfiles are deliberately minimal (python3/sudo/desktop terminal only) so the role's prereq installation, including Go, is actually exercised. The Mint image is amd64-only (needs binfmt on arm64 hosts). macOS is not container-testable — verify on real hardware.
+Molecule Dockerfiles are deliberately minimal (python3/sudo/desktop terminal only) so the role's prereq installation, including Go, is actually exercised. CI uses five Linux matrix jobs: `MOLECULE_PLATFORM_NAME` filters image downloads and `molecule test --platform-name` filters the entire container lifecycle. The Mint image is amd64-only (needs binfmt on arm64 hosts). `molecule test -s darwin` tests macOS directly on a native host; CI uses a separate `macos-15` runner. The Darwin scenario shares the full-role converge and editor verification playbooks and adds macOS-specific checks. Both scenarios limit Cargo and parser builds to two workers.
 
 ## Gotchas
 

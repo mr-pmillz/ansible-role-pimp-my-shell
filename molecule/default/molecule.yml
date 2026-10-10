@@ -3,8 +3,8 @@
 dependency:
   name: galaxy
   options:
-    role-file: requirements.yml
-    requirements-file: requirements.yml
+    role-file: ${MOLECULE_SCENARIO_DIRECTORY}/requirements.yml
+    requirements-file: ${MOLECULE_SCENARIO_DIRECTORY}/requirements.yml
 driver:
   name: docker
 platforms:
@@ -66,4 +66,12 @@ verifier:
   name: ansible
 scenario:
   name: default
+  # Keep the same coverage as converge + verify, with cleanup after the test.
+  # The role has intentionally changing tasks, so full-role idempotence is not run.
+  test_sequence:
+    - dependency
+    - create
+    - converge
+    - verify
+    - destroy
 role_name_check: 1

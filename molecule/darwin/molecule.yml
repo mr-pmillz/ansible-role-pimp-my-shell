@@ -1,0 +1,33 @@
+---
+dependency:
+  name: galaxy
+  options:
+    role-file: ${MOLECULE_SCENARIO_DIRECTORY}/../../requirements.yml
+    requirements-file: ${MOLECULE_SCENARIO_DIRECTORY}/../../requirements.yml
+driver:
+  name: default
+  options:
+    managed: false
+    ansible_connection_options:
+      ansible_connection: local
+platforms:
+  - name: darwin-pimp-my-shell
+provisioner:
+  name: ansible
+  inventory:
+    group_vars:
+      all:
+        ansible_become: false
+        ansible_python_interpreter: "{{ ansible_playbook_python }}"
+  playbooks:
+    converge: ../default/converge.yml
+verifier:
+  name: ansible
+scenario:
+  name: darwin
+  test_sequence:
+    - dependency
+    - prepare
+    - converge
+    - verify
+role_name_check: 1

@@ -1,0 +1,11 @@
+---
+- name: Check the native Darwin test host
+  hosts: all
+  gather_facts: true
+  tasks:
+    - name: Require macOS and a non-root user for Homebrew
+      ansible.builtin.assert:
+        that:
+          - ansible_facts['os_family'] == 'Darwin'
+          - ansible_facts['user_uid'] != 0
+        fail_msg: Run the Darwin scenario as a regular user on a macOS test host.

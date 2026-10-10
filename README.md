@@ -521,7 +521,18 @@ ansible-playbook playbook.yml -K
 
 ## Testing
 
-Linting and container tests (macOS cannot be tested in containers; test it on a real host or VM):
+CI runs Debian, Parrot, Mint, Ubuntu, and Kali in five independent Molecule jobs,
+each with its own Ubuntu runner and one container. A sixth job runs the Darwin
+scenario directly on a `macos-15` runner using Homebrew. All six jobs start after
+lint passes; a Linux distro failure does not cancel the other distro jobs.
+
+Each job runs the full role and verifies the editors, template highlighting,
+fuzzy pickers, Python provider, SQLite, and repeated highlighting setup. The
+Darwin scenario also verifies Kitty, fonts, shell configuration files, and
+Terminal.app profiles. Parser and Cargo builds use two workers in these scenarios
+to leave resources available for the CI runner.
+
+To run linting and the Linux container tests locally:
 
 Use a Python 3.14 virtual environment, as CI does, to keep pip dependencies separate from system packages such as `pyOpenSSL` and `cryptography`.
 Python 3.14 is the newest controller version supported by the current [Ansible release](https://docs.ansible.com/projects/ansible/latest/reference_appendices/release_and_maintenance.html#ansible-core-support-matrix).
@@ -559,6 +570,28 @@ molecule destroy
 deactivate
 ```
 
+To test just one Linux distro, keep the same platform selection for the image
+download and Molecule test:
+
+```bash
+export MOLECULE_PLATFORM_NAME=debian-pimp-my-shell
+ansible-playbook -i localhost, molecule/default/pull.yml
+molecule test --platform-name "$MOLECULE_PLATFORM_NAME"
+unset MOLECULE_PLATFORM_NAME
+```
+
+`molecule test` runs dependency installation, container creation, converge,
+verify, and container destruction. The platform filter applies to every stage,
+so the other four containers are not created. With no selection, the default
+scenario continues to test all five Linux distributions.
+
+On a macOS test host or disposable VM with Homebrew installed, use
+`molecule test -s darwin`. This scenario configures the current user's machine
+directly; it does not create or destroy a VM. It uses the same converge and
+editor verification playbooks as Linux. The role preserves the runner's
+preinstalled Go toolchain, so the exact downloaded Go version is asserted only
+for the fresh Linux containers.
+
 The Linux Mint image is published for amd64 only; on an arm64 host it needs qemu/binfmt emulation (`docker run --privileged tonistiigi/binfmt --install amd64`). All other images are multi-arch.
 
 Molecule pulls the official Debian and Ubuntu base images from
@@ -567,13 +600,14 @@ to avoid Docker Hub's unauthenticated pull quota on shared CI runners. Both the
 scenario image references and Dockerfile `FROM` lines use that registry. These
 public pulls need no AWS account or registry credentials.
 
-CI downloads all five base images before building, using `pull.yml` above. Each
+Each Linux CI job downloads only its selected base image, using `pull.yml` above. Each
 failed download gets up to five retries, waiting 60 seconds between attempts.
 The playbook reads the image names and architectures from `molecule.yml` and
 checks for newer images even when a local copy exists. Molecule then builds with
 `pull: false`, so a successful download is reused without another forced registry
 request. Run the same pull command before local container tests to refresh their
-base images. CI limits the download step to 30 minutes and stops if it fails.
+base images. Without `MOLECULE_PLATFORM_NAME`, the pull playbook downloads all five
+images. CI limits the download step to 30 minutes and stops if it fails.
 
 Kali, Parrot, and Mint still use their upstream Docker Hub repositories. A
 `toomanyrequests: You have reached your unauthenticated pull rate limit` error

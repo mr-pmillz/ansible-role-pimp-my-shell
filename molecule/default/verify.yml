@@ -7,6 +7,8 @@
     - ../../defaults/main.yml
   environment:
     PATH: "{{ ansible_facts['env']['HOME'] }}/.local/bin:{{ ansible_facts['env']['HOME'] }}/.cargo/bin:{{ ansible_facts['env']['PATH'] }}"
+    CARGO_BUILD_JOBS: "2"
+    TREESITTER_JOBS: "2"
   tasks:
     - name: Check the provisioned Go toolchain
       ansible.builtin.command: go version
@@ -15,7 +17,12 @@
         GOENV: "off"
       register: go_verify
       changed_when: false
-      failed_when: go_verify.rc != 0 or ('go version go' + go_version + ' ') not in go_verify.stdout
+      # Fresh Linux containers install the pinned release. macOS runners already
+      # have Go, which the role deliberately preserves unless upgrades are enabled.
+      failed_when: >-
+        go_verify.rc != 0 or
+        (ansible_facts['os_family'] != 'Darwin' and
+         ('go version go' + go_version + ' ') not in go_verify.stdout)
 
     - name: Verify Vim is still installed
       ansible.builtin.command: vim --version

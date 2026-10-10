@@ -5,6 +5,10 @@
   gather_facts: true
   vars:
     dark_mode: true
+    neovim_treesitter_jobs: 2
+  environment:
+    # Leave memory and CPU available for the hosted runner during native builds.
+    CARGO_BUILD_JOBS: "2"
   roles:
     # gantsign.oh-my-zsh runs first on Linux when zsh is selected.
     - role: mr_pmillz.pimp_my_shell

@@ -71,9 +71,18 @@ jobs:
         run: python tests/vim_go.py
 
   molecule:
+    name: Molecule (${{ matrix.distro }})
     runs-on: ubuntu-latest
     timeout-minutes: 180
     needs: lint
+    strategy:
+      fail-fast: false
+      matrix:
+        distro: [debian, parrot, mint, ubuntu, kali]
+    env:
+      MOLECULE_PLATFORM_NAME: ${{ matrix.distro }}-pimp-my-shell
+      PY_COLORS: '1'
+      ANSIBLE_FORCE_COLOR: '1'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v7.0.1
         with:
@@ -105,14 +114,48 @@ jobs:
           molecule --debug list
           molecule --debug syntax
 
-      - name: Download Molecule base images with retries
+      - name: Download this distro's base image with retries
         timeout-minutes: 30
         run: ansible-playbook -i localhost, molecule/default/pull.yml
 
       - name: Run Molecule converge and verify
+        # test applies the platform filter to create, converge, verify, and destroy.
+        run: molecule test --platform-name "$MOLECULE_PLATFORM_NAME"
+
+  molecule-darwin:
+    name: Molecule (Darwin / macOS)
+    runs-on: macos-15
+    timeout-minutes: 180
+    needs: lint
+    env:
+      PY_COLORS: '1'
+      ANSIBLE_FORCE_COLOR: '1'
+      HOMEBREW_NO_AUTO_UPDATE: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # ratchet:actions/setup-python@v7.0.0
+        with:
+          python-version: '3.14'
+
+      - name: Install Molecule tooling
         run: |
-          molecule converge
-          molecule verify
-        env:
-          PY_COLORS: '1'
-          ANSIBLE_FORCE_COLOR: '1'
+          python -m venv "$RUNNER_TEMP/pimp-my-shell-venv"
+          source "$RUNNER_TEMP/pimp-my-shell-venv/bin/activate"
+          echo "$VIRTUAL_ENV/bin" >> "$GITHUB_PATH"
+          echo "VIRTUAL_ENV=$VIRTUAL_ENV" >> "$GITHUB_ENV"
+          python -m pip install --upgrade pip
+          python -m pip install molecule ansible ansible-core ansible-lint yamllint
+          python -m pip check
+
+      - name: Validate native Darwin scenario
+        run: |
+          brew --version
+          molecule --version
+          molecule list -s darwin
+          molecule syntax -s darwin
+
+      - name: Run native Darwin converge and verify
+        run: molecule test -s darwin
