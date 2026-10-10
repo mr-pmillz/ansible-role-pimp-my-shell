@@ -263,6 +263,8 @@ bind-key -T copy-mode-vi MouseDragEnd1Pane send-keys -X copy-pipe-and-cancel "xc
 set -g activity-action other
 set -g assume-paste-time 1
 set -g base-index 0
+# oh-my-tmux binds prefix + 0 to window 10; match our zero-based numbering.
+bind 0 select-window -t :=0
 set -g bell-action any
 set -g default-command ""
 set -g default-shell "/usr/bin/zsh"
