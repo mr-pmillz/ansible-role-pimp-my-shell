@@ -37,7 +37,7 @@ def check_kitty(root: Path, os_family: str) -> None:
     }
 
     def release(version: str) -> None:
-        (source / "themes/Blazer.conf").write_text(f"# {version}\nbackground #0d1925\n")
+        (source / "themes/Dracula.conf").write_text(f"# {version}\nbackground #282a36\n")
         git("add", ".")
         git("commit", "-m", version)
         # The fixture checks the official installer's arguments, then provides
@@ -136,7 +136,7 @@ def check_kitty(root: Path, os_family: str) -> None:
                 link = userdir / ".local/bin" / binary
                 assert link.is_symlink() and link.resolve() == app / binary_path / binary
                 assert subprocess.check_output([str(link)], text=True) == f"{binary} {version}\n"
-            assert (config / "theme.conf").readlink() == Path("kitty-themes/themes/Blazer.conf")
+            assert (config / "theme.conf").readlink() == Path("kitty-themes/themes/Dracula.conf")
             assert (config / "theme.conf").read_text().startswith(f"# {version}\n")
             assert (config / "kitty.conf").read_text() == expected_config
             assert (config / "kitty-themes/.git/shallow").is_file()

@@ -11,7 +11,7 @@ Pimp your terminal on Linux and macOS. This role configures:
 - **Neovim** — [LazyVim](https://www.lazyvim.org/) with the customized [my-nvim](https://github.com/ImpostorKeanu/my-nvim) configuration, the default Tokyo Night colorscheme, language extras, and all supported Tree-sitter highlighters
 - **CLI tools** — [bat](https://github.com/sharkdp/bat) config and [fzf](https://github.com/junegunn/fzf) installed from git
 - **Boot console** — UTF-8 charmap so powerlevel10k glyphs render on the Linux boot console
-- **Kitty** — the official binary installer, Linux desktop integration, and the Blazer theme from [kitty-themes](https://github.com/dexpota/kitty-themes)
+- **Kitty** — the official binary installer, Linux desktop integration, and the Dracula theme from [kitty-themes](https://github.com/dexpota/kitty-themes)
 - **Terminal profiles** — GNOME Terminal (Ubuntu/Debian/Mint), XFCE Terminal (Kali), MATE Terminal (Parrot), and Terminal.app (macOS), light or dark
 
 ## Supported platforms
@@ -159,7 +159,7 @@ By default every component runs. Setting any `only_*` flag narrows the run to ju
 | `only_neovim` | Neovim, LazyVim, Go, Rust/Cargo, fzf, plugins, and Tree-sitter highlighters |
 | `only_vim` | Existing awesome-vimrc setup, Vim plugins, and `~/.vimrc` |
 | `only_bashrc` | `~/.bashrc` |
-| `only_kitty` | Kitty terminal, Linux desktop integration, and Blazer theme |
+| `only_kitty` | Kitty terminal, Linux desktop integration, and Dracula theme |
 | `only_terminal_profiles` | OS-specific terminal profiles |
 
 After the [localhost quick start](#localhost-quick-start), run any of these commands (omit `-K` when sudo does not require a password):
@@ -240,8 +240,8 @@ On Linux the role installs `kitty.desktop` and `kitty-open.desktop` into
 sets `~/.config/xdg-terminals.list` to `kitty.desktop`.
 
 The themes repository is shallow-cloned into `~/.config/kitty/kitty-themes`.
-`~/.config/kitty/theme.conf` links to `kitty-themes/themes/Blazer.conf`, and
-`kitty.conf` includes `./theme.conf` while retaining other settings. Blazer is
+`~/.config/kitty/theme.conf` links to `kitty-themes/themes/Dracula.conf`, and
+`kitty.conf` includes `./theme.conf` while retaining other settings. Dracula is
 used regardless of `dark_mode`. Normal reruns retain the installed binaries and
 themes; add `-e upgrade_components=true` to reinstall the latest Kitty release
 and update the themes repository.

@@ -103,9 +103,9 @@
     depth: 1
     update: "{{ upgrade_components | bool }}"
 
-- name: Select the Blazer Kitty theme
+- name: Select the Dracula Kitty theme
   ansible.builtin.file:
-    src: kitty-themes/themes/Blazer.conf
+    src: kitty-themes/themes/Dracula.conf
     dest: "{{ ansible_facts['env']['HOME'] }}/.config/kitty/theme.conf"
     state: link
     force: true
