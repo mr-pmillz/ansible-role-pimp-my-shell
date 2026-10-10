@@ -8,10 +8,64 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import time
 
 import yaml
+
+
+def process_status(pid: int) -> list[str] | None:
+    try:
+        # The process name may itself contain spaces and closing parentheses.
+        return Path(f"/proc/{pid}/stat").read_text().rsplit(") ", 1)[1].split()
+    except (FileNotFoundError, ProcessLookupError):
+        return None
+
+
+def wait_for_process_exit(pid: int, start_time: str, timeout: float = 10) -> None:
+    """Allow asynchronous teardown, but never accept a surviving build child."""
+    deadline = time.monotonic() + timeout
+    while True:
+        status = process_status(pid)
+        # Field 22 (index 19 after removing pid/comm) identifies this process.
+        # A runner may have already reaped it and reused the PID for another job.
+        if status is None or status[19] != start_time or status[0] in ("Z", "X", "x"):
+            return
+        if time.monotonic() >= deadline:
+            raise AssertionError(
+                f"build child {pid} still running after {timeout}s: "
+                f"state={status[0]} ppid={status[1]} pgid={status[2]} "
+                f"session={status[3]} start_time={status[19]}"
+            )
+        time.sleep(0.05)
+
+
+def check_process_waiter() -> None:
+    child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
+    try:
+        start_time = process_status(child.pid)[19]
+        try:
+            wait_for_process_exit(child.pid, start_time, timeout=0.1)
+        except AssertionError as error:
+            assert f"build child {child.pid} still running" in str(error), str(error)
+        else:
+            raise AssertionError("cleanup check accepted a live child")
+        # A different start time represents a reused PID, not a surviving child.
+        wait_for_process_exit(child.pid, str(int(start_time) - 1), timeout=0)
+    finally:
+        child.kill()
+        child.wait()
+    wait_for_process_exit(child.pid, start_time, timeout=0)
+
+    child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(0.2)"])
+    try:
+        wait_for_process_exit(child.pid, process_status(child.pid)[19], timeout=5)
+    finally:
+        if child.poll() is None:
+            child.kill()
+        child.wait()
+    print("PASS: cleanup check waits for exit and rejects surviving children", flush=True)
 
 
 def check_installer(root: Path, real: bool) -> None:
@@ -50,7 +104,9 @@ def check_installer(root: Path, real: bool) -> None:
             "    sys.exit(42)\n"
             "if behavior == 'hang':\n"
             "    child = subprocess.Popen(['sleep', '120'])\n"
-            "    (root / 'child.pid').write_text(str(child.pid))\n"
+            "    status = pathlib.Path(f'/proc/{child.pid}/stat').read_text()\n"
+            "    (root / 'child.json').write_text(json.dumps({\n"
+            "        'pid': child.pid, 'start_time': status.rsplit(') ', 1)[1].split()[19]}))\n"
             "    child.wait()\n"
             "if behavior != 'missing':\n"
             "    binary = pathlib.Path(os.environ['GOBIN']) / name\n"
@@ -167,12 +223,11 @@ def check_installer(root: Path, real: bool) -> None:
     assert not marker.exists()
 
     behavior.write_text("hang")
-    run("terminate a stuck Go build at its deadline", deadline=2,
+    run("report a stuck Go build timeout", deadline=2,
         error="Timeout exceeded")
-    pid = int((root / "child.pid").read_text())
-    status = Path(f"/proc/{pid}/stat")
-    if status.exists():
-        assert status.read_text().split(') ', 1)[1].startswith('Z '), "build child still running"
+    child = json.loads((root / "child.json").read_text())
+    wait_for_process_exit(child["pid"], child["start_time"])
+    print("PASS: timed-out build child was terminated", flush=True)
     assert not marker.exists()
 
     behavior.write_text("ok")
@@ -184,6 +239,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--real", action="store_true")
     args = parser.parse_args()
+    if not args.real:
+        check_process_waiter()
     with tempfile.TemporaryDirectory(prefix="pimp-my-shell-vim-go-") as directory:
         print(f"Test directory: {directory}", flush=True)
         check_installer(Path(directory), args.real)
