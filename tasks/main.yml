@@ -99,6 +99,10 @@
     mode: "0644"
   when: "'bashrc' in pimp_my_shell_components"
 
+- name: Install and configure Kitty
+  ansible.builtin.include_tasks: kitty.yml
+  when: "'kitty' in pimp_my_shell_components"
+
 # ── Terminal profiles per OS ──────────────────────────────────────────────
 - name: Configuring Parrot Terminal profiles
   ansible.builtin.include_tasks: terminal-profiles-parrot.yml

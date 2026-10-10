@@ -58,6 +58,9 @@ jobs:
       - name: Test component selection and shell isolation
         run: python tests/selection.py
 
+      - name: Test Kitty installation, desktop integration, and themes
+        run: python tests/kitty.py
+
       - name: Test Neovim fzf installation and shell isolation
         run: python tests/fzf.py
 

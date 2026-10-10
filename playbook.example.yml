@@ -21,6 +21,7 @@
     # only_neovim: true
     # only_nerdfonts: true
     # only_tmux: true
+    # only_kitty: true
   roles:
     # Use this checkout, regardless of its directory name or Galaxy installation.
     - role: "{{ playbook_dir }}"

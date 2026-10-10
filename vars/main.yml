@@ -34,6 +34,7 @@ pimp_my_shell_all_components:
   - vim
   - neovim
   - bashrc
+  - kitty
   - terminal_profiles
 
 # Components explicitly requested via only_* flags. Flags union, so
@@ -47,6 +48,7 @@ pimp_my_shell_selected_components: >-
      + (['vim'] if only_vim | bool else [])
      + (['neovim'] if only_neovim | bool else [])
      + (['bashrc'] if only_bashrc | bool else [])
+     + (['kitty'] if only_kitty | bool else [])
      + (['terminal_profiles'] if only_terminal_profiles | bool else []) }}
 
 # What actually runs: the explicit selection if any only_* flag is set,

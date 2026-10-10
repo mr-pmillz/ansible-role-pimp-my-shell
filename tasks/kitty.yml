@@ -1,0 +1,120 @@
+# code: language=ansible
+---
+- name: Set user-local Kitty installation paths
+  ansible.builtin.set_fact:
+    pimp_my_shell_kitty_install_dir: "{{ ansible_facts['env']['HOME'] }}/{{ 'Applications' if ansible_facts['os_family'] == 'Darwin' else '.local' }}/kitty.app"
+    pimp_my_shell_kitty_bin_dir: >-
+      {{ ansible_facts['env']['HOME'] }}/{{ 'Applications/kitty.app/Contents/MacOS'
+         if ansible_facts['os_family'] == 'Darwin' else '.local/kitty.app/bin' }}
+
+- name: Ensure Kitty directories exist
+  ansible.builtin.file:
+    path: "{{ ansible_facts['env']['HOME'] }}/{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - .local/bin
+    - .cache/kitty
+    - .config/kitty
+
+- name: Check installed Kitty executables
+  ansible.builtin.stat:
+    path: "{{ pimp_my_shell_kitty_bin_dir }}/{{ item }}"
+  loop:
+    - kitty
+    - kitten
+  register: pimp_my_shell_kitty_binaries
+
+- name: Install missing Kitty binaries or explicitly upgrade
+  when:
+    - upgrade_components | bool or pimp_my_shell_kitty_binaries.results | selectattr('stat.exists', 'equalto', false) | list | length > 0
+    - not ansible_check_mode
+  block:
+    - name: Download the official Kitty installer
+      ansible.builtin.get_url:
+        url: https://sw.kovidgoyal.net/kitty/installer.sh
+        dest: "{{ ansible_facts['env']['HOME'] }}/.cache/kitty/installer.sh"
+        mode: "0644"
+        force: true
+
+    - name: Run the Kitty installer without launching a terminal
+      ansible.builtin.command:
+        argv:
+          - sh
+          - "{{ ansible_facts['env']['HOME'] }}/.cache/kitty/installer.sh"
+          - launch=n
+          - "dest={{ pimp_my_shell_kitty_install_dir | dirname }}"
+      changed_when: true
+
+- name: Link Kitty executables into ~/.local/bin
+  ansible.builtin.file:
+    src: "{{ pimp_my_shell_kitty_bin_dir }}/{{ item }}"
+    dest: "{{ ansible_facts['env']['HOME'] }}/.local/bin/{{ item }}"
+    state: link
+    force: true
+  loop:
+    - kitty
+    - kitten
+
+# Render each upstream launcher in one copy operation. Copying it first and
+# replacing paths afterward would report changes on every normal rerun.
+- name: Configure Linux desktop integration for Kitty
+  when: ansible_facts['os_family'] != 'Darwin'
+  block:
+    - name: Ensure the user applications directory exists
+      ansible.builtin.file:
+        path: "{{ ansible_facts['env']['HOME'] }}/.local/share/applications"
+        state: directory
+        mode: "0755"
+
+    - name: Read the upstream Kitty desktop launchers
+      ansible.builtin.slurp:
+        src: "{{ pimp_my_shell_kitty_install_dir }}/share/applications/{{ item }}"
+      loop:
+        - kitty.desktop
+        - kitty-open.desktop
+      register: pimp_my_shell_kitty_desktop_files
+      when: not ansible_check_mode or pimp_my_shell_kitty_binaries.results | selectattr('stat.exists', 'equalto', false) | list | length == 0
+
+    - name: Install Kitty desktop launchers with absolute paths
+      ansible.builtin.copy:
+        content: >-
+          {{ item.content | b64decode
+             | regex_replace('(?m)^Icon=kitty$', 'Icon=' + pimp_my_shell_kitty_install_dir + '/share/icons/hicolor/256x256/apps/kitty.png')
+             | regex_replace('(?m)^Exec=kitty(?=\s|$)', 'Exec="' + pimp_my_shell_kitty_bin_dir + '/kitty"') }}
+        dest: "{{ ansible_facts['env']['HOME'] }}/.local/share/applications/{{ item.item }}"
+        mode: "0644"
+      loop: "{{ pimp_my_shell_kitty_desktop_files.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+      when: not ansible_check_mode or pimp_my_shell_kitty_binaries.results | selectattr('stat.exists', 'equalto', false) | list | length == 0
+
+    - name: Select Kitty for xdg-terminal-exec
+      ansible.builtin.copy:
+        content: "kitty.desktop\n"
+        dest: "{{ ansible_facts['env']['HOME'] }}/.config/xdg-terminals.list"
+        mode: "0644"
+        backup: true
+
+- name: Clone the Kitty themes
+  ansible.builtin.git: # noqa: latest[git] — intentionally tracks upstream default branch
+    repo: https://github.com/dexpota/kitty-themes.git
+    dest: "{{ ansible_facts['env']['HOME'] }}/.config/kitty/kitty-themes"
+    depth: 1
+    update: "{{ upgrade_components | bool }}"
+
+- name: Select the Blazer Kitty theme
+  ansible.builtin.file:
+    src: kitty-themes/themes/Blazer.conf
+    dest: "{{ ansible_facts['env']['HOME'] }}/.config/kitty/theme.conf"
+    state: link
+    force: true
+
+- name: Include the selected theme in Kitty configuration
+  ansible.builtin.lineinfile:
+    path: "{{ ansible_facts['env']['HOME'] }}/.config/kitty/kitty.conf"
+    regexp: '^\s*include\s+(?:\./)?theme\.conf\s*$'
+    line: include ./theme.conf
+    create: true
+    mode: "0644"
+    backup: true

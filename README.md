@@ -11,6 +11,7 @@ Pimp your terminal on Linux and macOS. This role configures:
 - **Neovim** — [LazyVim](https://www.lazyvim.org/) with the customized [my-nvim](https://github.com/ImpostorKeanu/my-nvim) configuration, the default Tokyo Night colorscheme, language extras, and all supported Tree-sitter highlighters
 - **CLI tools** — [bat](https://github.com/sharkdp/bat) config and [fzf](https://github.com/junegunn/fzf) installed from git
 - **Boot console** — UTF-8 charmap so powerlevel10k glyphs render on the Linux boot console
+- **Kitty** — the official binary installer, Linux desktop integration, and the Blazer theme from [kitty-themes](https://github.com/dexpota/kitty-themes)
 - **Terminal profiles** — GNOME Terminal (Ubuntu/Debian/Mint), XFCE Terminal (Kali), MATE Terminal (Parrot), and Terminal.app (macOS), light or dark
 
 ## Supported platforms
@@ -158,6 +159,7 @@ By default every component runs. Setting any `only_*` flag narrows the run to ju
 | `only_neovim` | Neovim, LazyVim, Go, Rust/Cargo, fzf, plugins, and Tree-sitter highlighters |
 | `only_vim` | Existing awesome-vimrc setup, Vim plugins, and `~/.vimrc` |
 | `only_bashrc` | `~/.bashrc` |
+| `only_kitty` | Kitty terminal, Linux desktop integration, and Blazer theme |
 | `only_terminal_profiles` | OS-specific terminal profiles |
 
 After the [localhost quick start](#localhost-quick-start), run any of these commands (omit `-K` when sudo does not require a password):
@@ -186,6 +188,7 @@ ansible-playbook playbook.yml -K -e upgrade_components=true
 ansible-playbook playbook.yml -K -e only_neovim=true -e only_nerdfonts=true -e only_tmux=true
 
 # Examples for other components.
+ansible-playbook playbook.yml -K -e only_kitty=true
 ansible-playbook playbook.yml -K -e only_zsh=true -e only_cli_tools=true
 ansible-playbook playbook.yml -K -e only_terminal_profiles=true -e dark_mode=true
 
@@ -224,6 +227,24 @@ ansible-galaxy collection install -r requirements.yml --upgrade
 ```
 
 Flags are independent — `only_neovim` does not pull in `only_nerdfonts`, even though the Neovim config renders glyphs that want a Nerd Font. Advanced callers can bypass the flags by passing `pimp_my_shell_components` directly as a role parameter, e.g. `pimp_my_shell_components: [neovim, tmux]`. Vim and Neovim are separate components; a default run installs both.
+
+## Kitty terminal
+
+Kitty installs with the [official binary installer](https://sw.kovidgoyal.net/kitty/binary/)
+into `~/.local/kitty.app` on Linux or `~/Applications/kitty.app` on macOS, with
+`launch=n` so provisioning does not open a terminal. Both `kitty` and `kitten`
+are linked into `~/.local/bin`; ensure that directory is on your `PATH`.
+
+On Linux the role installs `kitty.desktop` and `kitty-open.desktop` into
+`~/.local/share/applications`, rewrites their executable and icon paths, and
+sets `~/.config/xdg-terminals.list` to `kitty.desktop`.
+
+The themes repository is shallow-cloned into `~/.config/kitty/kitty-themes`.
+`~/.config/kitty/theme.conf` links to `kitty-themes/themes/Blazer.conf`, and
+`kitty.conf` includes `./theme.conf` while retaining other settings. Blazer is
+used regardless of `dark_mode`. Normal reruns retain the installed binaries and
+themes; add `-e upgrade_components=true` to reinstall the latest Kitty release
+and update the themes repository.
 
 ## Vim Go tools
 
@@ -519,6 +540,7 @@ ansible-lint
 bash tests/highlight.sh
 python tests/upgrades.py
 python tests/selection.py
+python tests/kitty.py
 python tests/fzf.py
 python tests/go.py
 python tests/vim_go.py

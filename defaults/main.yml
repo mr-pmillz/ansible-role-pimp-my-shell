@@ -110,6 +110,8 @@ only_vim: false
 only_neovim: false
 # ~/.bashrc
 only_bashrc: false
+# Kitty terminal, desktop integration, and Blazer theme (kitty.yml)
+only_kitty: false
 # XFCE/MATE/GNOME/Terminal.app profiles (terminal-profiles-*.yml)
 only_terminal_profiles: false
 

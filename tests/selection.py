@@ -51,6 +51,8 @@ def check_selection(root: Path) -> None:
 
     cases = [
         ("neovim only", {"only_neovim": True}, False),
+        ("kitty only", {"only_kitty": True}, False),
+        ("kitty and tmux", {"only_kitty": True, "only_tmux": True}, False),
         ("vim only", {"only_vim": True}, False),
         ("both editors", {"only_vim": True, "only_neovim": True}, False),
         ("neovim and zsh", {"only_neovim": True, "only_zsh": True}, True),
@@ -99,14 +101,20 @@ def check_selection(root: Path) -> None:
         assert result.returncode == 0, result.stdout + result.stderr
         expected = "dependency ran\n" if shell_selected else "existing customization\n"
         assert (userdir / ".zshrc").read_text() == expected, name
-        if name == "neovim only":
+        if name in ("neovim only", "kitty only", "kitty and tmux"):
             for filename in protected:
                 assert (
                     userdir / filename
                 ).read_text() == "existing customization\n", filename
             assert sorted(
                 p.name for p in userdir.iterdir() if not p.name.startswith(".")
-            ) == ["neovim"]
+            ) == {
+                "neovim only": ["neovim"],
+                "kitty only": ["kitty"],
+                "kitty and tmux": ["kitty", "ohmytmux"],
+            }[name]
+        if flags and not flags.get("only_kitty"):
+            assert not (userdir / "kitty").exists(), name
         if not flags:
             for task in (
                 "neovim",
@@ -115,6 +123,7 @@ def check_selection(root: Path) -> None:
                 "ohmytmux",
                 "nerdfonts",
                 "cli-tools",
+                "kitty",
                 "terminal-profiles-ubuntu",
             ):
                 assert (userdir / task).exists(), task
