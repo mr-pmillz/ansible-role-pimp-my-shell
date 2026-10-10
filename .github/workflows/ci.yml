@@ -134,6 +134,9 @@ jobs:
     timeout-minutes: 180
     needs: lint
     env:
+      # Scenario filtering happens after driver discovery in commands such as list.
+      # Keep the Linux Docker scenario out of this native macOS job entirely.
+      MOLECULE_GLOB: molecule/darwin/molecule.yml
       PY_COLORS: '1'
       ANSIBLE_FORCE_COLOR: '1'
       HOMEBREW_NO_AUTO_UPDATE: '1'

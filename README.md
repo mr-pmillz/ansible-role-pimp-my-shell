@@ -610,9 +610,23 @@ verify, and container destruction. The platform filter applies to every stage,
 so the other four containers are not created. With no selection, the default
 scenario continues to test all five Linux distributions.
 
-On a macOS test host or disposable VM with Homebrew installed, use
-`molecule test -s darwin`. This scenario configures the current user's machine
-directly; it does not create or destroy a VM. It uses the same converge and
+On a macOS test host or disposable VM with Homebrew installed, use:
+
+```bash
+export MOLECULE_GLOB=molecule/darwin/molecule.yml
+molecule list -s darwin
+molecule syntax -s darwin
+molecule test -s darwin
+unset MOLECULE_GLOB
+```
+
+`MOLECULE_GLOB` restricts discovery before Molecule loads scenario drivers;
+`-s darwin` alone does not prevent every command from loading the Linux Docker
+scenario. The Darwin CI job sets this variable for all its steps, so it needs
+only Molecule's built-in default driver.
+
+This scenario configures the current user's machine directly; it does not
+create or destroy a VM. It uses the same converge and
 editor verification playbooks as Linux. The role preserves the runner's
 preinstalled Go toolchain, so the exact downloaded Go version is asserted only
 for the fresh Linux containers.
