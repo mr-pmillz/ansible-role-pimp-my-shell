@@ -5,128 +5,131 @@
   gather_facts: true
   vars_files:
     - ../../defaults/main.yml
-  environment:
-    PATH: "{{ ansible_facts['env']['HOME'] }}/.local/bin:{{ ansible_facts['env']['HOME'] }}/.cargo/bin:{{ ansible_facts['env']['PATH'] }}"
-    CARGO_BUILD_JOBS: "2"
-    TREESITTER_JOBS: "2"
   tasks:
-    - name: Check the provisioned Go toolchain
-      ansible.builtin.command: go version
+    # Facts must be gathered before constructing a PATH from the target home.
+    - name: Verify editors with the provisioned tool paths
       environment:
-        GOTOOLCHAIN: local
-        GOENV: "off"
-      register: go_verify
-      changed_when: false
-      # Fresh Linux containers install the pinned release. macOS runners already
-      # have Go, which the role deliberately preserves unless upgrades are enabled.
-      failed_when: >-
-        go_verify.rc != 0 or
-        (ansible_facts['os_family'] != 'Darwin' and
-         ('go version go' + go_version + ' ') not in go_verify.stdout)
+        PATH: "{{ ansible_facts['env']['HOME'] }}/.local/bin:{{ ansible_facts['env']['HOME'] }}/.cargo/bin:{{ ansible_facts['env']['PATH'] }}"
+        CARGO_BUILD_JOBS: "2"
+        TREESITTER_JOBS: "2"
+      block:
+        - name: Check the provisioned Go toolchain
+          ansible.builtin.command: go version
+          environment:
+            GOTOOLCHAIN: local
+            GOENV: "off"
+          register: go_verify
+          changed_when: false
+          # Fresh Linux containers install the pinned release. macOS runners already
+          # have Go, which the role deliberately preserves unless upgrades are enabled.
+          failed_when: >-
+            go_verify.rc != 0 or
+            (ansible_facts['os_family'] != 'Darwin' and
+             ('go version go' + go_version + ' ') not in go_verify.stdout)
 
-    - name: Verify Vim is still installed
-      ansible.builtin.command: vim --version
-      changed_when: false
+        - name: Verify Vim is still installed
+          ansible.builtin.command: vim --version
+          changed_when: false
 
-    - name: Read the vim-go binary directory
-      ansible.builtin.command: go env -json GOBIN GOPATH
-      register: vim_go_verify_environment
-      changed_when: false
+        - name: Read the vim-go binary directory
+          ansible.builtin.command: go env -json GOBIN GOPATH
+          register: vim_go_verify_environment
+          changed_when: false
 
-    - name: Verify installed vim-go tools contain Go build metadata
-      ansible.builtin.command:
-        argv:
-          - go
-          - version
-          - -m
-          - "{{ vim_go_verify_bin_dir }}/{{ item.key }}"
-      vars:
-        vim_go_verify_bin_dir: >-
-          {{ (vim_go_verify_environment.stdout | from_json).GOBIN or
-             ((vim_go_verify_environment.stdout | from_json).GOPATH.split(':')[0] + '/bin') }}
-      loop: "{{ vim_go_tools | dict2items }}"
-      loop_control:
-        label: "{{ item.key }}"
-      changed_when: false
+        - name: Verify installed vim-go tools contain Go build metadata
+          ansible.builtin.command:
+            argv:
+              - go
+              - version
+              - -m
+              - "{{ vim_go_verify_bin_dir }}/{{ item.key }}"
+          vars:
+            vim_go_verify_bin_dir: >-
+              {{ (vim_go_verify_environment.stdout | from_json).GOBIN or
+                 ((vim_go_verify_environment.stdout | from_json).GOPATH.split(':')[0] + '/bin') }}
+          loop: "{{ vim_go_tools | dict2items }}"
+          loop_control:
+            label: "{{ item.key }}"
+          changed_when: false
 
-    - name: Check separate editor configurations
-      ansible.builtin.stat:
-        path: "{{ ansible_facts['env']['HOME'] }}/{{ item }}"
-      loop:
-        - .vimrc
-        - .vim_runtime/my_configs.vim
-        - .config/nvim/init.lua
-      register: editor_configs
+        - name: Check separate editor configurations
+          ansible.builtin.stat:
+            path: "{{ ansible_facts['env']['HOME'] }}/{{ item }}"
+          loop:
+            - .vimrc
+            - .vim_runtime/my_configs.vim
+            - .config/nvim/init.lua
+          register: editor_configs
 
-    - name: Verify both editor configurations exist
-      ansible.builtin.assert:
-        that:
-          - item.stat.isreg | default(false)
-      loop: "{{ editor_configs.results }}"
-      loop_control:
-        label: "{{ item.item }}"
+        - name: Verify both editor configurations exist
+          ansible.builtin.assert:
+            that:
+              - item.stat.isreg | default(false)
+          loop: "{{ editor_configs.results }}"
+          loop_control:
+            label: "{{ item.item }}"
 
-    - name: Install highlighting regression checks
-      ansible.builtin.copy:
-        src: "{{ playbook_dir }}/../../tests/neovim.lua"
-        dest: /tmp/pimp-my-shell-neovim-verify.lua
-        mode: "0644"
+        - name: Install highlighting regression checks
+          ansible.builtin.copy:
+            src: "{{ playbook_dir }}/../../tests/neovim.lua"
+            dest: /tmp/pimp-my-shell-neovim-verify.lua
+            mode: "0644"
 
-    - name: Verify template detection and actual language injections
-      ansible.builtin.command:
-        argv:
-          - nvim
-          - --headless
-          - -u
-          - NONE
-          - -i
-          - NONE
-          - -l
-          - /tmp/pimp-my-shell-neovim-verify.lua
-      changed_when: false
+        - name: Verify template detection and actual language injections
+          ansible.builtin.command:
+            argv:
+              - nvim
+              - --headless
+              - -u
+              - NONE
+              - -i
+              - NONE
+              - -l
+              - /tmp/pimp-my-shell-neovim-verify.lua
+          changed_when: false
 
-    - name: Verify highlighting setup is idempotent
-      ansible.builtin.command:
-        argv:
-          - "{{ ansible_facts['env']['HOME'] }}/.config/nvim/highlight.sh"
-      register: highlight_verify
-      changed_when: false
-      failed_when: highlight_verify.rc != 0 or 'HIGHLIGHT_CHANGED=1' in highlight_verify.stdout
+        - name: Verify highlighting setup is idempotent
+          ansible.builtin.command:
+            argv:
+              - "{{ ansible_facts['env']['HOME'] }}/.config/nvim/highlight.sh"
+          register: highlight_verify
+          changed_when: false
+          failed_when: highlight_verify.rc != 0 or 'HIGHLIGHT_CHANGED=1' in highlight_verify.stdout
 
-    - name: Install fuzzy picker regression checks
-      ansible.builtin.copy:
-        src: "{{ playbook_dir }}/../../tests/pickers.lua"
-        dest: /tmp/pimp-my-shell-pickers-verify.lua
-        mode: "0644"
+        - name: Install fuzzy picker regression checks
+          ansible.builtin.copy:
+            src: "{{ playbook_dir }}/../../tests/pickers.lua"
+            dest: /tmp/pimp-my-shell-pickers-verify.lua
+            mode: "0644"
 
-    - name: Verify fuzzy file and text search with the installed configuration
-      ansible.builtin.command:
-        argv:
-          - nvim
-          - --headless
-          - -i
-          - NONE
-          - -c
-          - luafile /tmp/pimp-my-shell-pickers-verify.lua
-      environment:
-        NVIM_HIGHLIGHT_SETUP: "1"
-      changed_when: false
+        - name: Verify fuzzy file and text search with the installed configuration
+          ansible.builtin.command:
+            argv:
+              - nvim
+              - --headless
+              - -i
+              - NONE
+              - -c
+              - luafile /tmp/pimp-my-shell-pickers-verify.lua
+          environment:
+            NVIM_HIGHLIGHT_SETUP: "1"
+          changed_when: false
 
-    - name: Install provider and SQLite regression checks
-      ansible.builtin.copy:
-        src: "{{ playbook_dir }}/../../tests/health.lua"
-        dest: /tmp/pimp-my-shell-health-verify.lua
-        mode: "0644"
+        - name: Install provider and SQLite regression checks
+          ansible.builtin.copy:
+            src: "{{ playbook_dir }}/../../tests/health.lua"
+            dest: /tmp/pimp-my-shell-health-verify.lua
+            mode: "0644"
 
-    - name: Verify the isolated Python provider and SQLite library
-      ansible.builtin.command:
-        argv:
-          - nvim
-          - --headless
-          - -i
-          - NONE
-          - -c
-          - luafile /tmp/pimp-my-shell-health-verify.lua
-      environment:
-        NVIM_HIGHLIGHT_SETUP: "1"
-      changed_when: false
+        - name: Verify the isolated Python provider and SQLite library
+          ansible.builtin.command:
+            argv:
+              - nvim
+              - --headless
+              - -i
+              - NONE
+              - -c
+              - luafile /tmp/pimp-my-shell-health-verify.lua
+          environment:
+            NVIM_HIGHLIGHT_SETUP: "1"
+          changed_when: false

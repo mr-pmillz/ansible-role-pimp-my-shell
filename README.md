@@ -575,6 +575,7 @@ ansible-lint
 bash tests/highlight.sh
 python tests/upgrades.py
 python tests/selection.py
+python tests/molecule_verify.py  # Check verifier startup without cached facts.
 python tests/zshrc.py  # Requires zsh; uses temporary files and a mock SSH agent.
 python tests/kitty.py
 python tests/fzf.py

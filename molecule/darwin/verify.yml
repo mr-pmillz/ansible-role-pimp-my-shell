@@ -5,51 +5,54 @@
 - name: Verify Darwin-specific installation
   hosts: all
   gather_facts: true
-  environment:
-    PATH: "{{ ansible_facts['env']['HOME'] }}/.local/bin:/opt/homebrew/bin:/usr/local/bin:{{ ansible_facts['env']['PATH'] }}"
   tasks:
-    - name: Check macOS application, font, and shell files
-      ansible.builtin.stat:
-        path: "{{ ansible_facts['env']['HOME'] }}/{{ item }}"
-      loop:
-        - Applications/kitty.app/Contents/MacOS/kitty
-        - Library/Fonts/MesloLGS NF Regular.ttf
-        - Library/Fonts/MesloLGS NF Bold.ttf
-        - Library/Fonts/MesloLGS NF Italic.ttf
-        - Library/Fonts/MesloLGS NF Bold Italic.ttf
-        - .zshrc
-        - .oh-my-zsh/oh-my-zsh.sh
-        - .tmux.conf.local
-      register: darwin_files
+    # Facts must be gathered before constructing a PATH from the target home.
+    - name: Verify native macOS tools and configuration
+      environment:
+        PATH: "{{ ansible_facts['env']['HOME'] }}/.local/bin:/opt/homebrew/bin:/usr/local/bin:{{ ansible_facts['env']['PATH'] }}"
+      block:
+        - name: Check macOS application, font, and shell files
+          ansible.builtin.stat:
+            path: "{{ ansible_facts['env']['HOME'] }}/{{ item }}"
+          loop:
+            - Applications/kitty.app/Contents/MacOS/kitty
+            - Library/Fonts/MesloLGS NF Regular.ttf
+            - Library/Fonts/MesloLGS NF Bold.ttf
+            - Library/Fonts/MesloLGS NF Italic.ttf
+            - Library/Fonts/MesloLGS NF Bold Italic.ttf
+            - .zshrc
+            - .oh-my-zsh/oh-my-zsh.sh
+            - .tmux.conf.local
+          register: darwin_files
 
-    - name: Verify the macOS files were installed
-      ansible.builtin.assert:
-        that:
-          - item.stat.isreg | default(false)
-      loop: "{{ darwin_files.results }}"
-      loop_control:
-        label: "{{ item.item }}"
+        - name: Verify the macOS files were installed
+          ansible.builtin.assert:
+            that:
+              - item.stat.isreg | default(false)
+          loop: "{{ darwin_files.results }}"
+          loop_control:
+            label: "{{ item.item }}"
 
-    - name: Check that Kitty runs natively
-      ansible.builtin.command:
-        argv:
-          - "{{ ansible_facts['env']['HOME'] }}/Applications/kitty.app/Contents/MacOS/kitty"
-          - --version
-      changed_when: false
+        - name: Check that Kitty runs natively
+          ansible.builtin.command:
+            argv:
+              - "{{ ansible_facts['env']['HOME'] }}/Applications/kitty.app/Contents/MacOS/kitty"
+              - --version
+          changed_when: false
 
-    - name: Read Terminal.app profiles
-      ansible.builtin.command:
-        argv: [defaults, read, com.apple.Terminal, "{{ item }}"]
-      loop:
-        - Default Window Settings
-        - Startup Window Settings
-      register: darwin_terminal_profiles
-      changed_when: false
+        - name: Read Terminal.app profiles
+          ansible.builtin.command:
+            argv: [defaults, read, com.apple.Terminal, "{{ item }}"]
+          loop:
+            - Default Window Settings
+            - Startup Window Settings
+          register: darwin_terminal_profiles
+          changed_when: false
 
-    - name: Verify Terminal.app uses the requested dark profile
-      ansible.builtin.assert:
-        that:
-          - item.stdout | trim == 'Pro'
-      loop: "{{ darwin_terminal_profiles.results }}"
-      loop_control:
-        label: "{{ item.item }}"
+        - name: Verify Terminal.app uses the requested dark profile
+          ansible.builtin.assert:
+            that:
+              - item.stdout | trim == 'Pro'
+          loop: "{{ darwin_terminal_profiles.results }}"
+          loop_control:
+            label: "{{ item.item }}"

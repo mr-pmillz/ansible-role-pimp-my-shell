@@ -58,6 +58,9 @@ jobs:
       - name: Test component selection and shell isolation
         run: python tests/selection.py
 
+      - name: Test Molecule verification with fresh facts
+        run: python tests/molecule_verify.py
+
       - name: Test Zsh configuration preservation and startup
         run: |
           sudo apt-get update
