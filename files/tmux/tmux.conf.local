@@ -244,6 +244,15 @@ bind-key j command-prompt -p "join pane from:" "join-pane -s ':%%'"
 bind-key s command-prompt -p "send pane to:" "join-pane -t ':%%'"
 # clear screen but not history so you can still scroll back
 bind -n C-l send-keys 'C-l'
+
+# fix home and end keys in nvim
+# Set the default terminal terminfo
+set -g default-terminal "tmux-256color"
+
+# Map Home and End keys to pass correct escape sequences to Neovim
+bind-key -n Home send Escape "OH"
+bind-key -n End send Escape "OF"
+
 # MOUSE SETTINGS
 set -g mouse on
 bind -n WheelUpPane if-shell -F -t = "#{mouse_any_flag}" "send-keys -M" "if -Ft= '#{pane_in_mode}' 'send-keys -M' 'select-pane -t=; copy-mode -e; send-keys -M'"
