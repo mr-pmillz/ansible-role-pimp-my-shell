@@ -5,15 +5,24 @@ repo_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
 test_dir=$(mktemp -d)
 trap 'rm -rf "$test_dir"' EXIT
 mkdir -p "$test_dir/cargo/bin"
+export XDG_STATE_HOME="$test_dir/logs"
 
 cat > "$test_dir/tool" <<'MOCK'
 #!/usr/bin/env bash
 set -euo pipefail
+fail_if_requested() {
+  if [[ ${HIGHLIGHT_TEST_FAIL:-} == "$1" ]]; then
+    echo "mock $1 stdout"
+    echo "mock $1 stderr" >&2
+    exit 42
+  fi
+}
 case ${0##*/} in
   cargo)
     if [[ $1 == --version ]]; then
       echo 'cargo 1.99.0'
     else
+      fail_if_requested cargo
       printf '%s\n' "$*" >> "$HIGHLIGHT_TEST_STATE/cargo.log"
       printf '%s\n' "${!#}" > "$HIGHLIGHT_TEST_STATE/cli-version"
     fi
@@ -24,6 +33,7 @@ case ${0##*/} in
       --version) echo 'rustup 1.28.2' ;;
       run) cat "$HIGHLIGHT_TEST_STATE/rust-version" ;;
       update)
+        fail_if_requested rustup
         echo 'rustc 1.99.0' > "$HIGHLIGHT_TEST_STATE/rust-version"
         echo update >> "$HIGHLIGHT_TEST_STATE/rustup.log"
         ;;
@@ -34,7 +44,20 @@ case ${0##*/} in
     [[ -s "$HIGHLIGHT_TEST_STATE/cli-version" ]] || exit 127
     printf 'tree-sitter %s\n' "$(cat "$HIGHLIGHT_TEST_STATE/cli-version")"
     ;;
-  nvim) printf '%s\n' "$NVIM_HIGHLIGHT_UPGRADE" >> "$HIGHLIGHT_TEST_STATE/nvim.log" ;;
+  nvim)
+    if [[ $* == *--clean* ]]; then
+      phase=prerequisites
+    elif [[ $* == *scripts/plugins.lua* ]]; then
+      phase=plugins
+    elif [[ $* == *--verify* ]]; then
+      phase=verify
+    else
+      phase=parsers
+    fi
+    fail_if_requested "$phase"
+    printf '%s\n' "$phase" >> "$HIGHLIGHT_TEST_STATE/phases.log"
+    printf '%s\n' "$NVIM_HIGHLIGHT_UPGRADE" >> "$HIGHLIGHT_TEST_STATE/nvim.log"
+    ;;
   *) exit 0 ;;
 esac
 MOCK
@@ -73,6 +96,11 @@ run_case() {
     [[ ! -e "$state/rustup.log" ]]
     [[ $(cat "$state/nvim.log") != *1* ]]
   fi
+  local log_file
+  log_file=$(sed -n 's/^Setup log: //p' "$state/output" | head -n 1)
+  cmp "$state/output" "$log_file"
+  [[ $(cat "$log_file") == *'Neovim setup completed.'* ]]
+  [[ $(cat "$state/phases.log") == $'prerequisites\nplugins\nparsers\nverify' ]]
   printf 'PASS: %s\n' "$name"
 }
 
@@ -93,3 +121,29 @@ for version in latest 0.25.0 '0.27.1; exit 0'; do
   fi
 done
 echo 'PASS: invalid and unsupported versions rejected'
+
+run_failure() {
+  local failure=$1 stage=$2 expected_status=${3:-42}
+  local state="$test_dir/fail-$failure" status=0 log_file
+  mkdir "$state"
+  echo 0.26.1 > "$state/cli-version"
+  echo 'rustc 1.99.0' > "$state/rust-version"
+  HIGHLIGHT_TEST_FAIL="$failure" HIGHLIGHT_TEST_STATE="$state" CARGO_HOME="$test_dir/cargo" \
+    NVIM_BIN="$test_dir/cargo/bin/nvim" \
+    bash "$repo_dir/files/nvim/highlight.sh" --upgrade > "$state/output" 2>&1 || status=$?
+  [[ $status == "$expected_status" ]]
+  [[ $(cat "$state/output") == *"failed during $stage (exit $expected_status)."* ]]
+  [[ $(cat "$state/output") == *"mock $failure stdout"* ]]
+  [[ $(cat "$state/output") == *"mock $failure stderr"* ]]
+  [[ $(cat "$state/output") != *'Neovim setup completed.'* ]]
+  log_file=$(sed -n 's/^Setup log: //p' "$state/output" | head -n 1)
+  cmp "$state/output" "$log_file"
+  printf 'PASS: %s failure preserves diagnostics and exit status\n' "$failure"
+}
+
+run_failure prerequisites 'checking prerequisites' 1
+run_failure rustup 'updating the stable Rust toolchain'
+run_failure cargo 'building the Tree-sitter CLI'
+run_failure plugins 'installing/updating LazyVim plugins'
+run_failure parsers 'installing Tree-sitter parsers and queries'
+run_failure verify 'verifying Tree-sitter parsers and queries'

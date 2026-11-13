@@ -360,6 +360,7 @@ Bufferline shows open files across the top with red **×** close buttons.
 | Drop within the top/bottom two rows of a pane | Create a split above/below |
 | Right-click a sidebar file | Choose current pane, split left/right/above/below, or new tab |
 | Click a filename in the top bar | Switch to that buffer |
+| Right-click a filename in the top bar | Choose current pane, vertical split, horizontal split, or new tab |
 | Click its red **×**, or middle-click the filename | Close the buffer; the last file closes the editor |
 | Drag a split divider | Resize the panes |
 
@@ -557,11 +558,16 @@ TREESITTER_LANGUAGES=bash,go,lua,python,yaml ~/.config/nvim/highlight.sh
 
 It installs missing Lazy plugins, discovers all languages supported by the installed
 `nvim-treesitter` main revision, waits for compilation, installs matching queries,
-and verifies parser loading and queries. Query-only helper languages are installed
+and verifies parser loading and queries in a fresh Neovim process so upgrades
+cannot validate new queries against an old parser still in memory. Query-only
+helper languages are installed
 alongside their dependents. Upstream tier-4 unsupported languages are excluded.
 Reruns repair incomplete installations and update parser revisions without updating
-the plugins themselves. Failures return a nonzero exit status; inspect `:TSLog` and
-rerun to retry. There is no permanent success marker hiding failed builds.
+the plugins themselves. Each run saves its output to a unique `highlight-*` log
+under `${XDG_STATE_HOME:-~/.local/state}/nvim` (or the configuration directory's
+name when using another app name). Failures report the stage, exit status, and
+full log path, including Tree-sitter's compiler/download diagnostics. Rerun to
+retry; there is no permanent success marker hiding failed builds.
 
 The script also generates Bash, CUE, HTML, JSON, and YAML Go-template dialects using
 the bundled upstream grammar. Files such as `config.yaml.gotmpl`, `page.gohtml`, and

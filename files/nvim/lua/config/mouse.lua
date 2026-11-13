@@ -4,6 +4,17 @@ local M = {}
 local drag, menu
 local preview
 
+local function popup(name)
+  -- Keep menu labels readable over editor text, and anchor them at the click.
+  local blend = vim.o.pumblend
+  vim.o.pumblend = 0
+  local ok, err = pcall(vim.cmd, "popup! " .. name)
+  vim.o.pumblend = blend
+  if not ok then
+    error(err)
+  end
+end
+
 local function clear_preview()
   if preview and vim.api.nvim_win_is_valid(preview.win) then
     vim.api.nvim_win_close(preview.win, true)
@@ -42,7 +53,7 @@ local actions = {
   tab = { cmd = "tabedit" },
 }
 
-local function open_file(file, win, action)
+local function open_item(item, win, action)
   local ok, err = pcall(function()
     if win and is_editor(win) then
       vim.api.nvim_set_current_win(win)
@@ -52,7 +63,19 @@ local function open_file(file, win, action)
       action = "current"
     end
     local command = vim.deepcopy(assert(actions[action]))
-    command.args = { file }
+    if item.buf then
+      if action == "current" then
+        command = { cmd = "buffer" }
+      elseif action == "tab" then
+        command = { cmd = "sbuffer", mods = { tab = 0 } }
+      else
+        command.mods.vertical = command.cmd == "vsplit"
+        command.cmd = "sbuffer"
+      end
+      command.args = { tostring(item.buf) }
+    else
+      command.args = { item.file }
+    end
     command.magic = { file = false }
     vim.api.nvim_cmd(command, {})
   end)
@@ -169,7 +192,7 @@ function M.drop()
   local target = item and item.moved and drop_target()
   clear_preview()
   if target then
-    open_file(item.file, target.win, target.action)
+    open_item(item, target.win, target.action)
   end
 end
 
@@ -180,14 +203,29 @@ function M.open_menu()
     return
   end
   menu.target = editor_window()
-  vim.cmd("popup PimpMyShellOpen")
+  popup("PimpMyShellOpen")
+end
+
+function M.open_buffer_menu(buf)
+  if not vim.api.nvim_buf_is_valid(buf) then
+    return
+  end
+  clear_preview()
+  drag = nil
+  local win = vim.api.nvim_get_current_win()
+  menu = { buf = buf, target = is_editor(win) and win or editor_window() }
+  -- Bufferline invokes this from a tabline click callback. Defer the popup
+  -- until that callback finishes, keeping the clicked buffer as its target.
+  vim.schedule(function()
+    popup("PimpMyShellBuffer")
+  end)
 end
 
 function M.menu_action(action)
   local item = menu
   menu = nil
   if item then
-    open_file(item.file, item.target, action)
+    open_item(item, item.target, action)
   end
 end
 
@@ -219,12 +257,13 @@ function M.setup()
   end, { expr = true, desc = "Open file at drop position" })
   vim.keymap.set({ "n", "i", "x" }, "<RightMouse>", function()
     drag = nil
-    if is_tree(vim.fn.getmousepos().winid) then
-      local escape = vim.fn.mode() == "n" and "" or "<Esc>"
+    local pos = vim.fn.getmousepos()
+    local escape = vim.fn.mode() == "n" and "" or "<Esc>"
+    if is_tree(pos.winid) then
       return escape .. "<LeftMouse><Cmd>lua require('config.mouse').open_menu()<CR>"
     end
     return "<RightMouse>"
-  end, { expr = true, desc = "Explorer open menu" })
+  end, { expr = true, desc = "File open menu" })
   for _, entry in ipairs({
     { "Current\\ pane", "current" },
     { "Split\\ left", "left" },
@@ -235,6 +274,19 @@ function M.setup()
   }) do
     vim.cmd(
       ("nnoremenu PimpMyShellOpen.%s <Cmd>lua require('config.mouse').menu_action('%s')<CR>"):format(entry[1], entry[2])
+    )
+  end
+  for _, entry in ipairs({
+    { "Current\\ pane", "current" },
+    { "Vertical\\ split", "right" },
+    { "Horizontal\\ split", "below" },
+    { "New\\ tab", "tab" },
+  }) do
+    vim.cmd(
+      ("anoremenu PimpMyShellBuffer.%s <Cmd>lua require('config.mouse').menu_action('%s')<CR>"):format(
+        entry[1],
+        entry[2]
+      )
     )
   end
   vim.api.nvim_create_autocmd({ "TabLeave", "FocusLost", "InsertEnter" }, {

@@ -244,6 +244,58 @@ def check_mouse(root: Path) -> None:
         assert nvim.current.buffer.name == str(second)
         print("PASS: right-click menu opens a new tab with the mouse", flush=True)
 
+        for action in ("Vertical split", "Horizontal split", "Current pane", "New tab"):
+            target = reset()
+            second_buf = lua("return vim.fn.bufadd(...)", str(second))
+            lua("vim.fn.bufload(...)", second_buf)
+            nvim.api.buf_set_lines(second_buf, 0, 1, False, ["unsaved buffer menu work"])
+            if action == "Horizontal split":
+                nvim.api.set_current_win(tree_file()[0])
+            elif action == "Current pane":
+                nvim.input("i")
+            elif action == "New tab":
+                nvim.input("v")
+            nvim.command("redraw!")
+            settle()
+            tabline = screen()[0]
+            tab_col = tabline.index("second space") + 2
+            mouse("press", 0, tab_col, "right")
+            mouse("release", 0, tab_col, "right")
+            lines = screen()
+            matches = [i for i, line in enumerate(lines) if action in line]
+            assert matches, f"Missing buffer menu action {action}:\n" + "\n".join(lines)
+            menu_row = matches[0]
+            assert menu_row <= 4, "Buffer menu should appear below the clicked tab"
+            menu_col = lines[menu_row].index(action) + 2
+            mouse("press", menu_row, menu_col)
+            mouse("release", menu_row, menu_col)
+            assert nvim.current.buffer.number == second_buf
+            assert nvim.current.buffer[0] == "unsaved buffer menu work"
+            if action in ("Vertical split", "Horizontal split"):
+                assert pane_count() == 3
+                assert nvim.api.buf_get_name(nvim.api.win_get_buf(target)) == str(first)
+                new_row, new_col, _, _ = geometry(nvim.current.window.handle)
+                old_row, old_col, _, _ = geometry(target)
+                assert new_col > old_col if action == "Vertical split" else new_row > old_row
+            elif action == "Current pane":
+                assert pane_count() == 2 and nvim.current.window.handle == target
+            else:
+                assert len(nvim.tabpages) == 2
+            nvim.command("edit!")
+            print(f"PASS: bufferline menu {action} uses the clicked buffer and preserves edits", flush=True)
+
+        target = reset()
+        tabline = screen()[0]
+        tab_col = tabline.index("second space") + 2
+        mouse("press", 0, tab_col, "right")
+        mouse("release", 0, tab_col, "right")
+        nvim.input("<Esc>")
+        settle()
+        assert nvim.current.window.handle == target
+        assert nvim.current.buffer.name == str(first)
+        assert pane_count() == 2
+        print("PASS: cancelling the bufferline menu keeps the current file and layout", flush=True)
+
         target = reset()
         row, col, height, width = geometry(target)
         drag_to(row + height // 2, col + width - 1)

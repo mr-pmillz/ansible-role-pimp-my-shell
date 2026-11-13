@@ -22,6 +22,8 @@ Optional environment:
 The five Go-template dialects and their base languages are always included.
 Re-running repairs missing parsers and updates parsers to the installed plugin's
 revisions. Unsupported upstream languages (tier 4) are excluded by nvim-treesitter.
+Each run saves its output under $XDG_STATE_HOME/<config-name> (default:
+~/.local/state/nvim). Failures report the setup stage and the log's full path.
 HELP
   exit 0
 fi
@@ -50,6 +52,38 @@ if ! [[ $tree_sitter_version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] ||
 fi
 
 config_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
+# Preserve diagnostics after the headless Neovim processes exit. In particular,
+# Tree-sitter's :TSLog belongs to that process, not the next interactive session.
+log_dir="${XDG_STATE_HOME:-$HOME/.local/state}/$(basename -- "$config_dir")"
+mkdir -p -- "$log_dir"
+log_file=$(mktemp "$log_dir/highlight-XXXXXXXX")
+exec 3>&1 4>&2
+exec > >(tee "$log_file") 2>&1
+log_pid=$!
+stage='checking prerequisites'
+installer=''
+finish() {
+  local status=$?
+  trap - EXIT
+  if (( status != 0 )); then
+    printf '\nNeovim setup failed during %s (exit %s).\n' "$stage" "$status"
+  else
+    printf '\nNeovim setup completed.\n'
+  fi
+  printf 'Setup log: %s\n' "$log_file"
+  [[ -z $installer ]] || rm -f -- "$installer"
+  # Close the pipe and wait for tee so the final diagnostics reach Ansible.
+  exec 1>&3 2>&4 3>&- 4>&-
+  wait "$log_pid" || true
+  exit "$status"
+}
+trap finish EXIT
+start_stage() {
+  stage=$1
+  printf '\nNeovim setup: %s\n' "$stage"
+}
+printf 'Setup log: %s\n' "$log_file"
+start_stage "$stage"
 export PATH="${CARGO_HOME:-$HOME/.cargo}/bin:$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
 export TREESITTER_JOBS=${TREESITTER_JOBS:-4}
 export TREESITTER_TIMEOUT=${TREESITTER_TIMEOUT:-3600}
@@ -68,8 +102,8 @@ done
 
 if ! cargo --version >/dev/null 2>&1 || ! rustc --version >/dev/null 2>&1 ||
   { [[ $NVIM_HIGHLIGHT_UPGRADE == 1 ]] && ! command -v rustup >/dev/null; }; then
+  start_stage 'installing Rust and Cargo'
   installer=$(mktemp)
-  trap 'rm -f "$installer"' EXIT
   curl --proto '=https' --tlsv1.2 -fsSL https://sh.rustup.rs -o "$installer"
   sh "$installer" -y --profile minimal
   cargo --version
@@ -79,6 +113,7 @@ fi
 
 cargo_command=(cargo)
 if [[ $NVIM_HIGHLIGHT_UPGRADE == 1 ]]; then
+  start_stage 'updating the stable Rust toolchain'
   rust_before=$(rustup run stable rustc --version 2>/dev/null || true)
   rustup_before=$(rustup --version)
   rustup update stable
@@ -97,6 +132,7 @@ fi
 cli_version=$(tree-sitter --version 2>/dev/null || true)
 if ! [[ $cli_version =~ ^tree-sitter\ ([0-9]+\.[0-9]+\.[0-9]+)($|[[:space:]]) ]] ||
   ! version_at_least "${BASH_REMATCH[1]}" "$required_cli_version"; then
+  start_stage 'building the Tree-sitter CLI'
   "${cargo_command[@]}" install --locked tree-sitter-cli --version "$tree_sitter_version"
   echo HIGHLIGHT_CHANGED=1
 fi
@@ -110,6 +146,12 @@ NVIM_APPNAME=$(basename -- "$config_dir")
 export NVIM_HIGHLIGHT_SETUP=1
 export NVIM_HIGHLIGHT_CONFIG="$config_dir"
 
+start_stage 'installing/updating LazyVim plugins'
 "$nvim_bin" --headless -i NONE -c 'lua dofile(vim.env.NVIM_HIGHLIGHT_CONFIG .. "/scripts/plugins.lua")'
 # Use a fresh process without plugin startup jobs competing with parser installs.
+start_stage 'installing Tree-sitter parsers and queries'
 "$nvim_bin" --headless -u NONE -i NONE -l "$config_dir/scripts/highlight.lua"
+# Parser libraries cannot be replaced in memory. Verify the updated binaries
+# and their queries in a fresh process, even when an old parser loaded fine.
+start_stage 'verifying Tree-sitter parsers and queries'
+"$nvim_bin" --headless -u NONE -i NONE -l "$config_dir/scripts/highlight.lua" --verify

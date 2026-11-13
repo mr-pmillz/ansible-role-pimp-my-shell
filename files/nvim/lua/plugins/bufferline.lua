@@ -14,7 +14,9 @@ return {
       middle_mouse_command = function(buf)
         require("config.quit").close_buffer(buf)
       end,
-      right_mouse_command = "buffer %d",
+      right_mouse_command = function(buf)
+        require("config.mouse").open_buffer_menu(buf)
+      end,
     },
     highlights = {
       close_button = { fg = "#f7768e" },

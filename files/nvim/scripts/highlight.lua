@@ -45,6 +45,31 @@ local ok, err = xpcall(function()
   local languages = vim.tbl_keys(selected)
   table.sort(languages)
   local site = vim.fn.stdpath("data") .. "/site"
+  -- Native parsers remain loaded for the lifetime of a Neovim process.
+  -- Validate in a fresh invocation so an upgrade cannot use the old grammar
+  -- with the newly installed queries (for example, Jinja v0.13.1).
+  if arg[1] == "--verify" then
+    local failures = {}
+    for _, language in ipairs(languages) do
+      local parser = definitions[language]
+      local valid, reason = pcall(function()
+        if parser.install_info then
+          assert(vim.treesitter.language.add(language, { path = site .. "/parser/" .. language .. ".so" }))
+          for _, path in ipairs(vim.api.nvim_get_runtime_file("queries/" .. language .. "/*.scm", true)) do
+            local query = vim.fn.fnamemodify(path, ":t:r")
+            vim.treesitter.query.get(language, query)
+          end
+        end
+      end)
+      if not valid then
+        failures[#failures + 1] = language .. ": " .. tostring(reason)
+      end
+    end
+    assert(#failures == 0, "Tree-sitter setup failed; rerun to retry.\n" .. table.concat(failures, "\n"))
+    io.stdout:write(("Verified %d Tree-sitter languages, including all five Go-template dialects\n"):format(#languages))
+    io.stdout:flush()
+    return
+  end
   local missing, outdated = {}, {}
   for _, language in ipairs(languages) do
     local parser = definitions[language]
@@ -55,7 +80,8 @@ local ok, err = xpcall(function()
     local complete = (not info or vim.fn.filereadable(binary) == 1)
       and (not needs_queries or vim.fn.isdirectory(queries) == 1)
     if complete and info then
-      complete = pcall(vim.treesitter.language.add, language, { path = binary })
+      local loaded, result = pcall(vim.treesitter.language.add, language, { path = binary })
+      complete = loaded and result == true
     end
     if not complete then
       missing[#missing + 1] = language
@@ -81,28 +107,18 @@ local ok, err = xpcall(function()
     success = ts.install(outdated, options):wait(timeout) ~= false and success
     changed = true
   end
-  local failures = {}
-  for _, language in ipairs(languages) do
-    local parser = definitions[language]
-    local valid, reason = pcall(function()
-      if parser.install_info then
-        vim.treesitter.language.add(language, { path = site .. "/parser/" .. language .. ".so" })
-        for _, path in ipairs(vim.api.nvim_get_runtime_file("queries/" .. language .. "/*.scm", true)) do
-          local query = vim.fn.fnamemodify(path, ":t:r")
-          vim.treesitter.query.get(language, query)
-        end
-      end
-    end)
-    if not valid then
-      failures[#failures + 1] = language .. ": " .. tostring(reason)
-    end
-  end
-  assert(success and #failures == 0, "Tree-sitter setup failed; rerun to retry. See :TSLog.\n" .. table.concat(failures, "\n"))
-  io.stdout:write(("Verified %d Tree-sitter languages, including all five Go-template dialects\n"):format(#languages))
+  assert(success, "Tree-sitter installation failed; rerun to retry.")
   io.stdout:write("HIGHLIGHT_CHANGED=" .. (changed and "1" or "0") .. "\n")
   io.stdout:flush()
 end, debug.traceback)
 if not ok then
   io.stderr:write(tostring(err) .. "\n")
+  -- :TSLog is kept in memory and disappears when this headless process exits.
+  -- Dump it now, including compiler/download details, for Ansible and the log.
+  io.stderr:write("Tree-sitter installation log:\n")
+  pcall(function()
+    require("nvim-treesitter.log").show()
+  end)
+  io.stderr:flush()
   vim.cmd("cquit 1")
 end
