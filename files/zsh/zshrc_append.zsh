@@ -42,8 +42,11 @@ ZSH_HIGHLIGHT_STYLES[bracket-level-3]=fg=magenta,bold
 ZSH_HIGHLIGHT_STYLES[bracket-level-4]=fg=yellow,bold
 ZSH_HIGHLIGHT_STYLES[bracket-level-5]=fg=cyan,bold
 ZSH_HIGHLIGHT_STYLES[cursor-matchingbracket]=standout
-# User-local Neovim and Rust/Cargo tools.
-[[ ":$PATH:" != *":${HOME}/.local/bin:"* ]] && export PATH="${HOME}/.local/bin:${PATH}"
+# Prefer user-local tools (including pipx) even when this directory was already
+# appended to PATH by the desktop session. Keep each PATH entry only once.
+typeset -U path
+path=("${HOME}/.local/bin" "${path[@]}")
+# Rust/Cargo tools.
 [[ ":$PATH:" != *":${CARGO_HOME:-$HOME/.cargo}/bin:"* ]] && export PATH="${CARGO_HOME:-$HOME/.cargo}/bin:${PATH}"
 
 # Add ~/go/bin to path

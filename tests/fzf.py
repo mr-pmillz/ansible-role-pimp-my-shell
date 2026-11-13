@@ -8,7 +8,7 @@ import tempfile
 import yaml
 
 
-def check_fzf(root: Path) -> None:
+def check_fzf(root: Path, legacy_shallow: bool = False) -> None:
     repo = Path(__file__).resolve().parents[1]
     source = root / "upstream"
     source.mkdir()
@@ -45,6 +45,16 @@ def check_fzf(root: Path) -> None:
     )
     userdir = root / "user"
     userdir.mkdir()
+    if legacy_shallow:
+        # Reproduce checkouts created by the old role: detached tag, depth 1,
+        # and no origin/HEAD. Upgrades must work without deleting user files.
+        subprocess.run(
+            ["git", "clone", "--depth=1", "--branch=v0.74.4",
+             source.as_uri(), str(userdir / ".fzf")],
+            check=True, capture_output=True,
+        )
+        assert (userdir / ".fzf/.git/shallow").is_file()
+        assert not (userdir / ".fzf/.git/refs/remotes/origin/HEAD").exists()
     protected = [".zshrc", ".bashrc", ".p10k.zsh", ".fzf.zsh", ".fzf.bash"]
     for filename in protected:
         (userdir / filename).write_text("existing customization\n")
@@ -143,4 +153,8 @@ def check_fzf(root: Path) -> None:
 
 if __name__ == "__main__":
     with tempfile.TemporaryDirectory(prefix="pimp-my-shell-fzf-") as directory:
-        check_fzf(Path(directory))
+        for legacy in (False, True):
+            root = Path(directory) / ("legacy-shallow" if legacy else "fresh")
+            root.mkdir()
+            print(f"Testing {root.name} checkout", flush=True)
+            check_fzf(root, legacy_shallow=legacy)

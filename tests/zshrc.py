@@ -185,7 +185,10 @@ ssh-agent() {
 if [[ "$PIMP_TEST_CASE" == 'existing custom settings' ]]; then
   export SSH_AUTH_SOCK=/fixture/forwarded.sock
 fi
+# Reproduce desktop sessions that append pipx's bin directory after /usr/bin.
+path=("${path[@]}" "$PIMP_TEST_HOME/.local/bin")
 source "$PIMP_TEST_HOME/runtime.zsh"
+(( ${path[(Ie)$PIMP_TEST_HOME/.local/bin]} < ${path[(Ie)/usr/bin]} ))
 [[ "$CLAUDE_CODE_DISABLE_ALTERNATE_SCREEN" == 1 ]]
 [[ "$CLAUDE_CODE_DISABLE_MOUSE_CLICKS" == 1 ]]
 [[ "$TERM" == fixture-term ]]

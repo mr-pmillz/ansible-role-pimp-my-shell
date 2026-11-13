@@ -29,11 +29,30 @@ The CPU architecture is detected dynamically from `ansible_facts['architecture']
 
 ## Requirements
 
-- Ansible **2.15+** and the `community.general` collection (see `requirements.yml`)
+- A supported Ansible version compatible with `community.general` (see `requirements.yml`); use the current full `ansible` package
 - **Linux**: `sudo` privileges (run plays with `-K` or passwordless sudo) — used only to install prerequisite packages and configure the boot console
 - **macOS**: [Homebrew](https://brew.sh) must already be installed (the role refuses to install it because that requires an interactive sudo prompt). Homebrew tasks run as the login user, not root.
 
 Prerequisite packages (zsh, git, curl, tmux, bat, fontconfig, dconf-cli, Node.js, compilers, ripgrep, fd, …) are installed automatically via **apt** on Linux and **Homebrew** on macOS — and only the packages the selected components actually need. The role also provides compatible Go and fzf releases for the editors. Set `install_prerequisites: false` to skip this if another role already provides them.
+
+Install the controller with [Ansible's documented pipx method](https://docs.ansible.com/projects/ansible/latest/intro_installation.html), using a Python version supported by the current Ansible release:
+
+```bash
+pipx install --include-deps ansible
+# Update Ansible and its injected tools:
+pipx upgrade --include-injected ansible
+pipx runpip ansible check
+```
+
+For development, keep `ansible-dev-tools`, `ansible-lint`, `molecule`, and
+`yamllint` in the same environment with `pipx inject --include-apps ansible ...`.
+Inject the Docker test libraries separately with
+`pipx inject ansible 'molecule-plugins[docker]' docker psutil`.
+On ARM64 Linux, Navigator's native dependency may require `libonig-dev`.
+Ensure `~/.local/bin` precedes `/usr/bin`; restart Zsh with `exec zsh` after
+changing PATH. Run the playbook as your login user with `-K` for privileged
+tasks. Running `sudo ansible-playbook` can select an older distro installation
+through sudo's separate PATH.
 
 Neovim requires **0.12+ with LuaJIT** for the bundled Tree-sitter plugin revision. On Linux, an existing compatible executable is reused; otherwise the role builds the configured release into `~/.local`. Rust/Cargo are installed with rustup if missing, and `tree-sitter-cli` is built with `cargo install --locked` when missing or older than 0.26.1.
 
@@ -327,6 +346,55 @@ colorscheme plugin yourself if migrating another configuration to the default th
 `install_prerequisites: false` assumes compatible Neovim, Go, fzf, and system build tools
 already exist; the user-local Rust/Cargo and plugin setup still runs.
 
+### Mouse controls in Neovim and Kitty
+
+The sidebar is **Neo-tree** (`Space → e`). Mouse support is enabled, and
+Bufferline shows open files across the top with red **×** close buttons.
+
+| Mouse action | Result |
+|--------------|--------|
+| Click a sidebar file | Select it |
+| Double-click a sidebar file | Open it in the editor |
+| Drag a sidebar file into the center of an editor pane | Open it in that pane |
+| Drop within the left/right three columns of a pane | Create a split on that side |
+| Drop within the top/bottom two rows of a pane | Create a split above/below |
+| Right-click a sidebar file | Choose current pane, split left/right/above/below, or new tab |
+| Click a filename in the top bar | Switch to that buffer |
+| Click its red **×**, or middle-click the filename | Close the buffer; the last file closes the editor |
+| Drag a split divider | Resize the panes |
+
+At a corner, the left/right drop zone takes precedence. Drops onto the sidebar,
+terminal, help, or other special buffers do nothing. Dragging opens the file; it
+does not move or copy files on disk. A shaded preview highlights the destination
+and labels the horizontal/vertical split direction while dragging. Use the
+right-click menu when you want an explicit destination. “Current pane” in that
+menu means the last active editor pane. Unsaved buffers show a dot instead of
+**×**; middle-click offers Save/Discard/Cancel, or save first to restore the **×**.
+Neovim tab pages still hold independent pane layouts; the file bar lists buffers.
+
+Typed `:q` / `:quit` closes the active editor pane and removes its file from the
+bar if no other pane displays it. In the last editor pane, it closes the current
+file and switches to another open buffer if one remains. `:wq` saves first;
+`:q!` explicitly discards the current file's edits. Closing the final file with
+**×** exits Neovim, with a save/discard/cancel prompt if any buffer has unsaved
+work. Use `:qa` to quit all panes explicitly. The command abbreviations apply to
+typed commands; plugin/API calls to Neovim's built-in quit retain native behavior.
+
+In **Kitty**, use these gestures **without Shift**. Kitty already forwards mouse
+events when Neovim requests them; Shift gives Kitty control for terminal text
+selection. No Kitty mouse remapping is needed for these in-editor drags.
+The role supplies a small Neo-tree drag adapter in `config/mouse.lua` alongside
+the existing plugins.
+
+Kitty's [mouse mappings and paste filters](https://sw.kovidgoyal.net/kitty/conf/#mouse-actions)
+and [file-opening rules](https://sw.kovidgoyal.net/kitty/open_actions/) also support
+other workflows. Launch rules can pass `nvim -O` (vertical splits), `nvim -o`
+(horizontal splits), or `nvim -p` (tab pages) when starting a new editor.
+Those rules do not select panes inside an existing Neovim process. Desktop file
+drops and Kitty's [drag-and-drop protocol](https://sw.kovidgoyal.net/kitty/kittens/dnd/)
+are separate from dragging within Neo-tree; this configuration does not turn
+ordinary pasted paths or desktop drops into editor commands.
+
 ### Useful hotkeys for power users
 
 These shortcuts apply to the bundled LazyVim configuration, which uses Neo-tree
@@ -382,8 +450,8 @@ Neovim panes; tmux panes have their own bindings.
 | Search available key mappings | `Space → s → k` |
 
 Files remain open as buffers when you switch files in the same pane. A tab holds
-its own arrangement of panes. This configuration disables bufferline's visual
-file bar; use `Space → ,` to see open buffers. Inside the fzf picker, `Ctrl+t`
+its own arrangement of panes. Bufferline displays the open buffers in a clickable
+file bar; `Space → ,` also lists them. Inside the fzf picker, `Ctrl+t`
 opens Trouble's results list. To open a sidebar file in a new tab, use Neo-tree's
 `t` mapping above.
 
@@ -587,6 +655,8 @@ python tests/vim_go.py --real
 nvim --headless -u NONE -i NONE -l tests/neovim.lua
 NVIM_HIGHLIGHT_SETUP=1 nvim --headless -i NONE -c 'luafile tests/pickers.lua'
 NVIM_HIGHLIGHT_SETUP=1 nvim --headless -i NONE -c 'luafile tests/health.lua'
+# Real mouse events in an embedded UI, using the role's pynvim environment:
+"${XDG_DATA_HOME:-$HOME/.local/share}/nvim/python/bin/python" tests/mouse.py
 molecule --debug list # Validate scenario/driver configuration without creating containers
 molecule --debug syntax # Check role discovery and converge playbook syntax
 ansible-playbook -i localhost, molecule/default/pull.yml # Refresh base images with download retries

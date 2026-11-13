@@ -22,11 +22,13 @@
         - not ansible_check_mode
       block:
         - name: Clone the upstream fzf installer
+          # Shallow tag updates crash in affected ansible-core releases when
+          # origin/HEAD is absent (ansible/ansible#87881). A normal fetch also
+          # works when upgrading an existing shallow ~/.fzf checkout.
           ansible.builtin.git:
             repo: https://github.com/junegunn/fzf.git
             dest: "{{ ansible_facts['env']['HOME'] }}/.fzf"
             version: "v{{ neovim_fzf_version }}"
-            depth: 1
 
         # Upstream's --bin mode neither prompts nor writes any shell files.
         # It downloads the native release, falling back to a Go source build.

@@ -13,7 +13,10 @@ if vim.fn.executable(python_host) == 1 and not vim.g.python3_host_prog then
   vim.g.python3_host_prog = python_host
 end
 
--- vim.opt.mouse = "" -- disable mouse
+vim.opt.mouse = "a" -- click, scroll, resize splits, and drag files from Neo-tree
+vim.opt.mousemodel = "popup_setpos"
+vim.opt.splitright = true
+vim.opt.splitbelow = true
 
 -- ENABLE PER-PROJECT RC/SCRIPTS
 vim.opt.exrc = true -- allow per-project rc files (.nvim.lua)
