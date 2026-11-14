@@ -296,7 +296,9 @@ tasks. Cold builds of tools such as `gopls` and `golangci-lint` can take several
 minutes. Ansible reports the tool name and polls every 10 seconds while it builds;
 failed commands report their compiler or download errors and stop the installation.
 Each build has a deadline, and builds run on one host at a time to avoid exhausting
-the shared CI runner when Molecule tests multiple distributions.
+the shared CI runner when Molecule tests multiple distributions. The installer
+owns the build's process group and kills its compiler children at the deadline,
+then returns the captured output before Ansible's outer watchdog expires.
 
 | Variable | Default | Description |
 |----------|---------|-------------|

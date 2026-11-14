@@ -3,14 +3,10 @@
 # exhausting the shared Molecule runner's CPU and memory. Each tool is a
 # separate task so a failure stops immediately and identifies the package.
 - name: Install vim-go tool {{ vim_go_tool.item.key }}
-  ansible.builtin.command:
-    argv:
-      - go
-      - install
-      - -v
-      - -p
-      - "{{ vim_go_build_jobs | string }}"
-      - "{{ vim_go_tool.item.value }}"
+  pimp_my_shell_go_install:
+    package: "{{ vim_go_tool.item.value }}"
+    jobs: "{{ vim_go_build_jobs | int }}"
+    timeout: "{{ vim_go_install_timeout | int }}"
     chdir: "{{ ansible_facts['env']['HOME'] }}"
   environment:
     GOBIN: "{{ vim_go_bin_dir }}"
@@ -18,7 +14,10 @@
     GOOS: "{{ (vim_go_environment.stdout | from_json).GOHOSTOS }}"
     GOARCH: "{{ (vim_go_environment.stdout | from_json).GOHOSTARCH }}"
     GOMAXPROCS: "{{ vim_go_build_jobs | string }}"
-  async: "{{ vim_go_install_timeout | int }}"
+  # The module enforces the build deadline and kills its own process group.
+  # Leave time for it to reap the build and report diagnostics before Ansible's
+  # outer watchdog intervenes; async's parent-side group assignment can race.
+  async: "{{ (vim_go_install_timeout | int) + 60 }}"
   poll: 10
   throttle: 1
   changed_when: true

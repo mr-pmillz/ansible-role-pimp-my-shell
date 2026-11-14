@@ -7,6 +7,8 @@ import argparse
 import json
 import os
 from pathlib import Path
+import runpy
+import signal
 import subprocess
 import sys
 import tempfile
@@ -66,6 +68,84 @@ def check_process_waiter() -> None:
             child.kill()
         child.wait()
     print("PASS: cleanup check waits for exit and rejects surviving children", flush=True)
+
+
+def check_build_deadline(root: Path) -> None:
+    """Force the async supervisor's late process-group assignment every time."""
+    repo = Path(__file__).resolve().parents[1]
+    run_build = runpy.run_path(str(repo / "library/pimp_my_shell_go_install.py"))["run_build"]
+    build = root / "build.py"
+    records_file = root / "processes.json"
+    result_file = root / "result.json"
+    build.write_text(
+        "import json, os, pathlib, subprocess, sys\n"
+        "child = subprocess.Popen([sys.executable, '-c', "
+        "'import signal,time; signal.signal(signal.SIGTERM, signal.SIG_IGN); time.sleep(120)'])\n"
+        "records = []\n"
+        "for pid in (os.getpid(), child.pid):\n"
+        "    fields = pathlib.Path(f'/proc/{pid}/stat').read_text().rsplit(') ', 1)[1].split()\n"
+        "    records.append({'pid': pid, 'start_time': fields[19]})\n"
+        "print('partial build output', flush=True)\n"
+        "print('partial compiler error', file=sys.stderr, flush=True)\n"
+        "target = pathlib.Path(sys.argv[1])\n"
+        "target.with_suffix('.tmp').write_text(json.dumps(records))\n"
+        "target.with_suffix('.tmp').replace(target)\n"
+        "child.wait()\n"
+    )
+    reader, writer = os.pipe()
+    worker = os.fork()
+    if worker == 0:
+        os.close(writer)
+        original_popen = subprocess.Popen
+
+        def gated_popen(*args, **kwargs):
+            process = original_popen(*args, **kwargs)
+            # Start the deadline only after the fixture has spawned its child
+            # and the parent has moved this worker to a different group. This
+            # forces the bad ordering without depending on CI scheduling.
+            os.read(reader, 1)
+            os.close(reader)
+            return process
+
+        subprocess.Popen = gated_popen
+        try:
+            result = run_build([sys.executable, str(build), str(records_file)], str(root), 0.1)
+            result_file.write_text(json.dumps(result))
+        finally:
+            os._exit(0)
+
+    os.close(reader)
+    processes = [{"pid": worker, "start_time": process_status(worker)[19]}]
+    try:
+        deadline = time.monotonic() + 15
+        while not records_file.exists():
+            assert time.monotonic() < deadline, "build fixture did not start"
+            time.sleep(0.01)
+        processes.extend(json.loads(records_file.read_text()))
+        os.setpgid(worker, worker)
+        os.write(writer, b"1")
+        while not result_file.exists():
+            assert time.monotonic() < deadline, "deadline did not terminate the build"
+            time.sleep(0.01)
+        wait_for_process_exit(worker, processes[0]["start_time"])
+        result = json.loads(result_file.read_text())
+        assert result["timed_out"] and result["rc"] == 124, result
+        assert "partial build output" in result["stdout"], result
+        assert "partial compiler error" in result["stderr"], result
+        for process in processes[1:]:
+            wait_for_process_exit(process["pid"], process["start_time"])
+    finally:
+        os.close(writer)
+        # A regression must fail without leaving runaway fixtures in CI.
+        for process in reversed(processes):
+            status = process_status(process["pid"])
+            if status and status[19] == process["start_time"]:
+                try:
+                    os.kill(process["pid"], signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+        os.waitpid(worker, 0)
+    print("PASS: deadline kills build and child after late supervisor group assignment", flush=True)
 
 
 def check_installer(root: Path, real: bool) -> None:
@@ -152,6 +232,8 @@ def check_installer(root: Path, real: bool) -> None:
     env = {
         **os.environ,
         "ANSIBLE_HOME": str(root / "ansible"),
+        # This fixture includes task files directly, outside the role loader.
+        "ANSIBLE_LIBRARY": str(repo / "library"),
         "PMS_VIM_GO_TEST": str(root),
         "GOBIN": str(bindir),
         "GOPATH": str(root / "go-path"),
@@ -224,7 +306,7 @@ def check_installer(root: Path, real: bool) -> None:
 
     behavior.write_text("hang")
     run("report a stuck Go build timeout", deadline=2,
-        error="Timeout exceeded")
+        error="Timeout exceeded after 2s installing")
     child = json.loads((root / "child.json").read_text())
     wait_for_process_exit(child["pid"], child["start_time"])
     print("PASS: timed-out build child was terminated", flush=True)
@@ -241,6 +323,9 @@ if __name__ == "__main__":
     args = parser.parse_args()
     if not args.real:
         check_process_waiter()
+        for _ in range(3):
+            with tempfile.TemporaryDirectory(prefix="pimp-my-shell-go-deadline-") as directory:
+                check_build_deadline(Path(directory))
     with tempfile.TemporaryDirectory(prefix="pimp-my-shell-vim-go-") as directory:
         print(f"Test directory: {directory}", flush=True)
         check_installer(Path(directory), args.real)
