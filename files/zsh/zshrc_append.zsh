@@ -31,7 +31,8 @@ ZSH_HIGHLIGHT_STYLES[back-double-quoted-argument]=fg=magenta,bold
 ZSH_HIGHLIGHT_STYLES[back-dollar-quoted-argument]=fg=magenta,bold
 ZSH_HIGHLIGHT_STYLES[assign]=none
 ZSH_HIGHLIGHT_STYLES[redirection]=fg=blue,bold
-ZSH_HIGHLIGHT_STYLES[comment]=fg=black,bold
+# Explicit light gray keeps comments readable on Kitty's dark background.
+ZSH_HIGHLIGHT_STYLES[comment]='fg=#a6accd'
 ZSH_HIGHLIGHT_STYLES[named-fd]=none
 ZSH_HIGHLIGHT_STYLES[numeric-fd]=none
 ZSH_HIGHLIGHT_STYLES[arg0]=fg=green
