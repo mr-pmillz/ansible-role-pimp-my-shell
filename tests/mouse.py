@@ -14,6 +14,8 @@ import pynvim
 
 
 def check_mouse(root: Path) -> None:
+    # macOS /var and /tmp can alias /private/...; Neovim uses the real path.
+    root = root.resolve()
     first = root / "first.txt"
     second = root / "second space | %.txt"
     first.write_text("first buffer\n" * 80)
@@ -397,4 +399,9 @@ if __name__ == "__main__":
     signal.signal(signal.SIGALRM, timeout)
     signal.alarm(60)
     with tempfile.TemporaryDirectory(prefix="pimp-my-shell-mouse-files-") as directory:
-        check_mouse(Path(directory))
+        # Cover macOS-style path aliases on every platform, including Linux CI.
+        real = Path(directory) / "files"
+        real.mkdir()
+        alias = Path(directory) / "linked-files"
+        alias.symlink_to(real, target_is_directory=True)
+        check_mouse(alias)
