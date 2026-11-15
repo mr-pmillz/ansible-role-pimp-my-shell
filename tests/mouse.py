@@ -84,10 +84,21 @@ def check_mouse(root: Path) -> None:
     def reset():
         nvim.input("<Esc>")
         settle()  # Finish mode changes and deferred popup cleanup before rebuilding the layout.
-        nvim.command("silent! tabonly!")
         nvim.command("silent! Neotree close")
         settle()
-        nvim.command("only!")
+        # Neo-tree remembers sidebar locations/sizes per tab page. Start a fresh
+        # layout so prior divider drags and pane joins cannot affect this case.
+        nvim.command("tabnew")
+        nvim.command("silent! tabonly!")
+        # Delete test files, retaining plugin buffers and their window state.
+        lua("""
+          for _, buf in ipairs(vim.fn.getbufinfo({buflisted=1})) do
+            if vim.bo[buf.bufnr].buftype == '' then
+              vim.api.nvim_buf_delete(buf.bufnr, {force=true})
+            end
+          end
+        """)
+        settle()  # Let buffer/window cleanup finish before opening the next fixture.
         lua("vim.api.nvim_cmd({cmd='edit',args={...},magic={file=false}}, {})", str(first))
         target = nvim.current.window.handle
         lua("require('neo-tree.command').execute({action='show',dir=...,reveal_file=select(2,...)})",
@@ -98,6 +109,9 @@ def check_mouse(root: Path) -> None:
             settle()
         nvim.api.set_current_win(target)
         settle()
+        assert nvim.current.buffer.name == str(first), (
+            "Reset did not restore the editor pane", nvim.current.buffer.name, screen(),
+        )
         return target
 
     def previews():
@@ -127,6 +141,17 @@ def check_mouse(root: Path) -> None:
         row += bool(nvim.api.get_option_value("winbar", {"win": win}))
         return row, col, nvim.api.win_get_height(win), nvim.api.win_get_width(win)
 
+    def tab_point(win, filename, close=False):
+        row, col = nvim.api.win_get_position(win)
+        line = screen()[row][col:col + nvim.api.win_get_width(win)]
+        index = line.index(filename)
+        return row, col + (line.index("×", index) if close else index + 2)
+
+    def open_in_pane(win, path):
+        nvim.api.set_current_win(win)
+        lua("vim.api.nvim_cmd({cmd='edit',args={...},magic={file=false}}, {})", str(path))
+        settle()
+
     def pane_count():
         # Notifications are floating windows, not editor panes.
         return lua("""
@@ -140,8 +165,8 @@ def check_mouse(root: Path) -> None:
 
     try:
         nvim.ui_attach(160, 50, rgb=True, ext_linegrid=True)
-        lua("vim.wait(10000, function() return package.loaded['bufferline'] ~= nil end, 20)")
-        assert lua("return package.loaded['bufferline'] ~= nil"), "Bufferline did not load"
+        lua("vim.wait(10000, function() return package.loaded['config.panes'] ~= nil end, 20)")
+        assert lua("return package.loaded['config.panes'] ~= nil"), "Pane tabs did not load"
         nvim.options["mousetime"] = 1
         assert nvim.options["mouse"] == "a"
 
@@ -282,6 +307,8 @@ def check_mouse(root: Path) -> None:
             target = reset()
             second_buf = lua("return vim.fn.bufadd(...)", str(second))
             lua("vim.fn.bufload(...)", second_buf)
+            open_in_pane(target, second)
+            open_in_pane(target, first)
             nvim.api.buf_set_lines(second_buf, 0, 1, False, ["unsaved buffer menu work"])
             if action == "Horizontal split":
                 nvim.api.set_current_win(tree_file()[0])
@@ -291,10 +318,9 @@ def check_mouse(root: Path) -> None:
                 nvim.input("v")
             nvim.command("redraw!")
             settle()
-            tabline = screen()[0]
-            tab_col = tabline.index("second space") + 2
-            mouse("press", 0, tab_col, "right")
-            mouse("release", 0, tab_col, "right")
+            tab_row, tab_col = tab_point(target, "second space")
+            mouse("press", tab_row, tab_col, "right")
+            mouse("release", tab_row, tab_col, "right")
             lines = screen()
             matches = [i for i, line in enumerate(lines) if action in line]
             assert matches, f"Missing buffer menu action {action}:\n" + "\n".join(lines)
@@ -316,19 +342,20 @@ def check_mouse(root: Path) -> None:
             else:
                 assert len(nvim.tabpages) == 2
             nvim.command("edit!")
-            print(f"PASS: bufferline menu {action} uses the clicked buffer and preserves edits", flush=True)
+            print(f"PASS: pane tab menu {action} uses the clicked buffer and preserves edits", flush=True)
 
         target = reset()
-        tabline = screen()[0]
-        tab_col = tabline.index("second space") + 2
-        mouse("press", 0, tab_col, "right")
-        mouse("release", 0, tab_col, "right")
+        open_in_pane(target, second)
+        open_in_pane(target, first)
+        tab_row, tab_col = tab_point(target, "second space")
+        mouse("press", tab_row, tab_col, "right")
+        mouse("release", tab_row, tab_col, "right")
         nvim.input("<Esc>")
         settle()
         assert nvim.current.window.handle == target
         assert nvim.current.buffer.name == str(first)
         assert pane_count() == 2
-        print("PASS: cancelling the bufferline menu keeps the current file and layout", flush=True)
+        print("PASS: cancelling the pane tab menu keeps the current file and layout", flush=True)
 
         for zone in ("left", "right", "above", "below", "current"):
             target = reset()
@@ -355,7 +382,7 @@ def check_mouse(root: Path) -> None:
             x = col + (0 if zone == "left" else width - 1 if zone == "right" else width // 2)
             start_row, start_col = nvim.api.win_get_position(source)
             before = pane_count()
-            mouse("press", start_row, start_col + 6)
+            mouse("press", start_row, start_col + 1)
             mouse("drag", y, x)
             assert len(previews()) == 1, (zone, screen())
             label = "Join panes" if zone == "current" else f"Move pane: {zone}"
@@ -385,7 +412,7 @@ def check_mouse(root: Path) -> None:
 
         target = reset()
         row, col, height, width = geometry(target)
-        mouse("press", row - 1, col + 6)
+        mouse("press", row - 1, col + 1)
         mouse("drag", row + height // 2, col + width // 2)
         assert not previews()
         mouse("release", row + height // 2, col + width // 2)
@@ -395,7 +422,7 @@ def check_mouse(root: Path) -> None:
         settle()
         row, col, height, width = geometry(target)
         sy, sx = nvim.api.win_get_position(source)
-        mouse("press", sy, sx + 6)
+        mouse("press", sy, sx + 1)
         mouse("drag", row + height // 2, col + width // 2)
         assert previews()
         nvim.input("<Esc>")
@@ -416,10 +443,10 @@ def check_mouse(root: Path) -> None:
         settle()
         sy, sx = nvim.api.win_get_position(source)
         row, col, height, width = geometry(target)
-        mouse("press", sy, sx + 6)
-        mouse("release", sy, sx + 6)
+        mouse("press", sy, sx + 1)
+        mouse("release", sy, sx + 1)
         assert nvim.current.window.handle == source and pane_count() == 3
-        mouse("press", sy, sx + 6)
+        mouse("press", sy, sx + 1)
         mouse("drag", row + height // 2, col + width // 2)
         mouse("release", row + height // 2, col + width // 2)
         assert pane_count() == 2
@@ -433,10 +460,11 @@ def check_mouse(root: Path) -> None:
 
         for zone in ("current", "left", "right", "above", "below"):
             target = reset()
-            lua("vim.fn.bufload(vim.fn.bufadd(...))", str(second))
+            open_in_pane(target, second)
+            open_in_pane(target, first)
             nvim.command("redraw!")
             settle()
-            tab_col = screen()[0].index("second space") + 2
+            tab_row, tab_col = tab_point(target, "second space")
             row, col, height, width = geometry(target)
             y = row + (0 if zone == "above" else height - 1 if zone == "below" else height // 2)
             x = col + (0 if zone == "left" else width - 1 if zone == "right" else width // 2)
@@ -445,7 +473,7 @@ def check_mouse(root: Path) -> None:
             elif zone == "below":
                 nvim.input("v")
             settle()
-            mouse("press", 0, tab_col)
+            mouse("press", tab_row, tab_col)
             mouse("drag", y, x)
             assert len(previews()) == 1, (zone, screen())
             mouse("release", y, x)
@@ -454,7 +482,7 @@ def check_mouse(root: Path) -> None:
             assert pane_count() == (2 if zone == "current" else 3)
             if zone != "current":
                 assert nvim.api.buf_get_name(nvim.api.win_get_buf(target)) == str(first)
-            print(f"PASS: bufferline drag opens the file in {zone} pane", flush=True)
+            print(f"PASS: pane tab drag opens the file in {zone} pane", flush=True)
 
         target = reset()
         row, col, height, width = geometry(target)
@@ -464,8 +492,8 @@ def check_mouse(root: Path) -> None:
         settle()
         assert pane_count() == 2, "Quit should close just the second editor pane"
         assert not listed(second_buf)
-        assert "second space" not in screen()[0]
-        print("PASS: :q closes the pane and removes its file from Bufferline", flush=True)
+        assert "second space" not in "\n".join(screen()[:2])
+        print("PASS: :q closes the pane and removes its file from the pane tabs", flush=True)
 
         target = reset()
         row, col, height, width = geometry(target)
@@ -504,23 +532,21 @@ def check_mouse(root: Path) -> None:
         row, col, height, width = geometry(target)
         drag_to(row + height // 2, col + width // 2)
         second_buf = nvim.current.buffer.number
-        tabline = screen()[0]
-        first_col = tabline.index("first.txt") + 2
-        mouse("press", 0, first_col)
-        mouse("release", 0, first_col)
+        tab_row, first_col = tab_point(target, "first.txt")
+        mouse("press", tab_row, first_col)
+        mouse("release", tab_row, first_col)
         assert nvim.current.buffer.name == str(first)
-        tabline = screen()[0]
-        close_col = tabline.index("×", tabline.index("second space"))
-        mouse("press", 0, close_col)
-        mouse("release", 0, close_col)
+        tab_row, close_col = tab_point(target, "second space", close=True)
+        mouse("press", tab_row, close_col)
+        mouse("release", tab_row, close_col)
         assert not listed(second_buf)
         assert pane_count() == 2
         print("PASS: file tabs switch and close buffers without collapsing panes", flush=True)
 
         nvim.current.buffer[0] = "unsaved work"
         first_buf = nvim.current.buffer.number
-        mouse("press", 0, first_col, "middle")
-        mouse("release", 0, first_col, "middle")
+        mouse("press", tab_row, first_col, "middle")
+        mouse("release", tab_row, first_col, "middle")
         nvim.input("c")
         settle()
         assert nvim.current.buffer[0] == "unsaved work"
@@ -530,13 +556,12 @@ def check_mouse(root: Path) -> None:
 
         nvim.command("edit!")
         settle()
-        assert len(lua("return vim.fn.getbufinfo({buflisted=1})")) == 1
-        tabline = screen()[0]
-        close_col = tabline.index("×", tabline.index("first.txt"))
+        assert len(lua("return require('config.panes').buffers()")) == 1
+        tab_row, close_col = tab_point(target, "first.txt", close=True)
         exited = False
         try:
-            mouse("press", 0, close_col)
-            mouse("release", 0, close_col)
+            mouse("press", tab_row, close_col)
+            mouse("release", tab_row, close_col)
         except EOFError:
             exited = True
         assert exited, "Closing the final clean file must exit the editor"

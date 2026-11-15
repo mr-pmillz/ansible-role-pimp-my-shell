@@ -6,16 +6,6 @@ local function other_buffers(buf)
   end, vim.api.nvim_list_bufs())
 end
 
-function M.close_buffer(buf)
-  if #other_buffers(buf) == 0 then
-    -- The last file closes the editor. Native confirmation also checks hidden
-    -- modified buffers, so no unsaved work is silently discarded.
-    vim.cmd("confirm qall")
-  else
-    Snacks.bufdelete(buf)
-  end
-end
-
 function M.close(force)
   local buf = vim.api.nvim_get_current_buf()
   if vim.bo[buf].buftype ~= "" then
@@ -27,8 +17,8 @@ function M.close(force)
   end, vim.api.nvim_list_wins())
   local others = other_buffers(buf)
   if #editors == 1 and #others > 0 then
-    -- Bufferline files share a pane. Keep it alive while another file is open.
-    Snacks.bufdelete({ buf = buf, force = force })
+    -- In the last pane, close one file and select another from that pane.
+    require("config.panes").close(buf, nil, force)
     return
   end
   local win = vim.api.nvim_get_current_win()
@@ -38,6 +28,7 @@ function M.close(force)
     not vim.api.nvim_win_is_valid(win)
     and vim.api.nvim_buf_is_valid(buf)
     and #vim.fn.win_findbuf(buf) == 0
+    and not require("config.panes").owned(buf, win)
     and (force or not vim.bo[buf].modified)
   then
     vim.api.nvim_buf_delete(buf, { force = force })

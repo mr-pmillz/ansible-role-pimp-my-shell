@@ -350,8 +350,10 @@ already exist; the user-local Rust/Cargo and plugin setup still runs.
 
 ### Mouse controls in Neovim and Kitty
 
-The sidebar is **Neo-tree** (`Space → e`). Mouse support is enabled, and
-Bufferline shows open files across the top with red **×** close buttons.
+The sidebar is **Neo-tree** (`Space → e`). Each editor pane has its own file
+tabs directly above it, with red **×** close buttons. Opening a file in a right
+split places its tab above that right split. These pane headers replace the
+global Bufferline row.
 
 | Mouse action | Result |
 |--------------|--------|
@@ -361,12 +363,14 @@ Bufferline shows open files across the top with red **×** close buttons.
 | Drop within the left/right three columns of a pane | Create a split on that side |
 | Drop within the top/bottom two rows of a pane | Create a split above/below |
 | Right-click a sidebar file | Choose current pane, split left/right/above/below, or new tab |
-| Click a filename in the top bar | Switch to that buffer |
-| Drag a filename from the top bar | Open that buffer in the highlighted pane or new split |
-| Drag a pane's **⠿ filename** header onto another pane's edge | Move the pane to that split position |
-| Drag a pane's header into another pane's center | Join the panes; keep both files in Bufferline |
-| Right-click a filename in the top bar | Choose current pane, vertical split, horizontal split, or new tab |
-| Click its red **×**, or middle-click the filename | Close the buffer; the last file closes the editor |
+| Click a file tab above a pane | Focus that pane and switch to its file |
+| Drag a file tab into another pane or onto its tab row | Move the file tab to that pane |
+| Drag a file tab onto a pane's edge | Move the file into a new split |
+| Drag a pane's **⠿** grip onto another pane's edge | Move the pane and all its tabs to that split position |
+| Drag a pane's **⠿** grip into another pane's center | Join the panes and combine their file tabs |
+| Right-click a file tab | Choose current pane, vertical split, horizontal split, or new tab |
+| Click its red **×**, or middle-click the filename | Close that file tab; the final file closes the editor |
+| Click **‹** / **›** in a narrow pane's tab row | Scroll through its file tabs |
 | Drag a split divider | Resize the panes |
 
 At a corner, the left/right drop zone takes precedence. Drops onto the sidebar,
@@ -374,16 +378,19 @@ terminal, help, or other special buffers do nothing. Dragging opens the file; it
 does not move or copy files on disk. A shaded preview highlights the destination
 and labels the horizontal/vertical split direction while dragging. Use the
 right-click menu when you want an explicit destination. “Current pane” in that
-menu means the last active editor pane. Unsaved buffers show a dot instead of
-**×**; middle-click offers Save/Discard/Cancel, or save first to restore the **×**.
-Neovim tab pages still hold independent pane layouts; the file bar lists buffers.
-Pane moves preserve the window and cursor. Joining keeps unsaved changes in both
-buffers; the dragged pane stays visible. `Esc` cancels a drag. Pane headers use
-the editor theme and reserve text dragging for selection.
+sidebar menu means the last active editor pane; a file tab's menu targets its
+own pane. A split opened from the menu adds another view of the same file.
+Unsaved files show a **●** beside their name; closing offers Save/Discard/Cancel
+when no other pane owns the file. Closing one shared view preserves the other
+view and its edits. Neovim tab pages still hold independent pane layouts.
+Pane moves preserve the window and cursor. Joining retains every file from both
+panes, including unsaved changes; the dragged pane stays visible. `Esc` cancels
+a drag. Pane headers use the editor theme, and dragging editor text selects it.
 
 Typed `:q` / `:quit` closes the active editor pane and removes its file from the
-bar if no other pane displays it. In the last editor pane, it closes the current
-file and switches to another open buffer if one remains. `:wq` saves first;
+bar if no other pane owns it. Other files from the closed pane move to a surviving
+pane. In the last editor pane, it closes the current file and switches to another
+open file if one remains. `:wq` saves first;
 `:q!` explicitly discards the current file's edits. Closing the final file with
 **×** exits Neovim, with a save/discard/cancel prompt if any buffer has unsaved
 work. Use `:qa` to quit all panes explicitly. The command abbreviations apply to
@@ -392,8 +399,8 @@ typed commands; plugin/API calls to Neovim's built-in quit retain native behavio
 In **Kitty**, use these gestures **without Shift**. Kitty already forwards mouse
 events when Neovim requests them; Shift gives Kitty control for terminal text
 selection. No Kitty mouse remapping is needed for these in-editor drags.
-The role supplies file and pane drag handling in `config/mouse.lua` alongside
-the existing plugins.
+The role supplies file tabs in `config/panes.lua` and drag handling in
+`config/mouse.lua` alongside the existing plugins.
 
 Kitty's [mouse mappings and paste filters](https://sw.kovidgoyal.net/kitty/conf/#mouse-actions)
 and [file-opening rules](https://sw.kovidgoyal.net/kitty/open_actions/) also support
@@ -408,7 +415,7 @@ ordinary pasted paths or desktop drops into editor commands.
 
 Files edited by Codex, Claude Code, or another process automatically reload
 within about half a second, even when you're working in another tmux pane.
-Atomic file replacements and hidden Bufferline buffers are checked too.
+Atomic file replacements and files behind inactive tabs are checked too.
 Unsaved Neovim edits are retained with a warning if the disk version changes;
 deleted files retain their buffer contents for recovery.
 
@@ -472,16 +479,22 @@ Neovim panes; tmux panes have their own bindings.
 |--------|------|
 | Find a file by name | `Space → Space` |
 | Search text across files | `Space → /` |
-| Pick an already-open file (buffer) | `Space → ,` |
-| Show the previous / next open buffer | `Shift+H` / `Shift+L` |
-| Switch back to the previously edited buffer | `Space → b → b` |
-| Close the current buffer | `Space → b → d` |
+| Pick an open file from any pane | `Space → ,` or `Space → f → b` |
+| Pick a file from the current pane | `Space → b → j` |
+| Previous / next file in the current pane | `Shift+h` / `Shift+l`, or `[b` / `]b` |
+| Switch back to the previously active file in this pane | `Space → b → b` or `Ctrl+6` |
+| Close the current file tab | `Space → b → d` |
+| Close other file tabs in this pane | `Space → b → o` |
+| Close file tabs to the left / right in this pane | `Space → b → l` / `Space → b → r` |
+| Move the current file tab left / right | `[B` / `]B` |
 | Save the current file | `Ctrl+s` |
 | Search available key mappings | `Space → s → k` |
 
-Files remain open as buffers when you switch files in the same pane. A tab holds
-its own arrangement of panes. Bufferline displays the open buffers in a clickable
-file bar; `Space → ,` also lists them. Inside the fzf picker, `Ctrl+t`
+Files opened in a pane stay in that pane's clickable tab row. Keyboard cycling
+stays within the focused pane; `Ctrl+h/j/k/l` changes the focused pane. Picking
+a file with `Space → ,` adds it to the current pane, even if another pane also
+has it open. Neovim tab pages contain whole pane layouts; `gt` / `gT` switch
+between them. Inside the fzf picker, `Ctrl+t`
 opens Trouble's results list. To open a sidebar file in a new tab, use Neo-tree's
 `t` mapping above.
 
@@ -505,7 +518,7 @@ Press `Space` and pause to see the available shortcut groups, or press
 `Space → Tab` and pause for the tab menu. See the
 [LazyVim keymap reference](https://www.lazyvim.org/keymaps) and
 [Neo-tree mappings](https://github.com/nvim-neo-tree/neo-tree.nvim#quickstart)
-for more; the tables above account for this role's sidebar, picker, and bufferline
+for more; the tables above account for this role's sidebar, picker, and pane tab
 settings.
 
 ### File and text search on Mint/Ubuntu

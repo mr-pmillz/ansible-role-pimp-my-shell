@@ -128,6 +128,19 @@
               - /tmp/pimp-my-shell-mouse-verify.py
           changed_when: false
 
+        - name: Install pane file tab regression checks
+          ansible.builtin.copy:
+            src: "{{ playbook_dir }}/../../tests/panes.py"
+            dest: /tmp/pimp-my-shell-panes-verify.py
+            mode: "0644"
+
+        - name: Verify pane file tabs, keyboard navigation, and unsaved work
+          ansible.builtin.command:
+            argv:
+              - "{{ ansible_facts['env']['XDG_DATA_HOME'] | default(ansible_facts['env']['HOME'] + '/.local/share', true) }}/nvim/python/bin/python"
+              - /tmp/pimp-my-shell-panes-verify.py
+          changed_when: false
+
         - name: Install external edit and paste regression checks
           ansible.builtin.copy:
             src: "{{ playbook_dir }}/../../tests/editor.py"

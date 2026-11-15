@@ -3,3 +3,4 @@
 -- Add any additional keymaps here
 require("config.mouse").setup()
 require("config.quit").setup()
+require("config.panes").setup()

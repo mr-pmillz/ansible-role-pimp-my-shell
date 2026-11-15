@@ -1,10 +1,9 @@
 -- File and pane drags use terminal mouse events, including in Kitty.
--- No file is moved on disk; joining panes keeps both buffers in Bufferline.
+-- No file is moved on disk; joining panes merges their file tabs.
 local M = {}
 local drag, menu
 local preview
 local tree_double_click = false
-local winbar = "%@v:lua.require'config.mouse'.pane_click@ ⠿ %t %m%=%T"
 
 local function popup(name)
   -- Keep menu labels readable over editor text, and anchor them at the click.
@@ -32,15 +31,6 @@ local function is_editor(win)
   return vim.api.nvim_win_is_valid(win)
     and vim.api.nvim_win_get_config(win).relative == ""
     and vim.bo[vim.api.nvim_win_get_buf(win)].buftype == ""
-end
-
-local function update_headers()
-  for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
-    local bar = vim.wo[win].winbar
-    if bar == "" or bar == winbar then
-      vim.wo[win].winbar = is_editor(win) and winbar or ""
-    end
-  end
 end
 
 function M.pane_click(_, _, button)
@@ -71,10 +61,10 @@ local function editor_window()
   end
 end
 
-function M.buffer_click(buf)
+function M.buffer_click(buf, win)
   clear_preview()
-  local win = vim.api.nvim_get_current_win()
-  drag = { buf = buf, target = is_editor(win) and win or editor_window(), moved = false }
+  win = win or vim.api.nvim_get_current_win()
+  drag = { buf = buf, source = win, target = is_editor(win) and win or editor_window(), moved = false }
 end
 
 local actions = {
@@ -87,7 +77,7 @@ local actions = {
 }
 
 local function open_item(item, win, action)
-  local ok, err = pcall(function()
+  local ok, result = pcall(function()
     if win and is_editor(win) then
       vim.api.nvim_set_current_win(win)
     elseif action ~= "tab" then
@@ -98,7 +88,7 @@ local function open_item(item, win, action)
     local command = vim.deepcopy(assert(actions[action]))
     if item.buf then
       if action == "current" then
-        command = { cmd = "buffer" }
+        command = { cmd = "buffer", mods = { hide = true } }
       elseif action == "tab" then
         command = { cmd = "sbuffer", mods = { tab = 0 } }
       else
@@ -111,10 +101,14 @@ local function open_item(item, win, action)
     end
     command.magic = { file = false }
     vim.api.nvim_cmd(command, {})
+    require("config.panes").refresh()
+    return vim.api.nvim_get_current_win()
   end)
   if not ok then
-    vim.notify(tostring(err), vim.log.levels.WARN, { title = "Open file" })
+    vim.notify(tostring(result), vim.log.levels.WARN, { title = "Open file" })
+    return
   end
+  return result
 end
 
 function M.capture()
@@ -148,6 +142,9 @@ local function drop_target()
   local height = vim.api.nvim_win_get_height(pos.winid)
   local winbar = vim.wo[pos.winid].winbar ~= "" and 1 or 0
   local row = pos.winrow - winbar
+  if winbar == 1 and row == 0 then
+    return { win = pos.winid, action = "current", width = width, height = height, winbar = winbar }
+  end
   -- Ignore statuslines, separators, popups, and drops back into the sidebar.
   if row < 1 or row > height or pos.wincol < 1 or pos.wincol > width then
     return
@@ -256,6 +253,7 @@ local function move_pane(item, target)
       vim.api.nvim_win_call(target.win, function()
         vim.api.nvim_cmd({ cmd = "close", mods = { hide = true } }, {})
       end)
+      require("config.panes").merge(item.win, target.win)
     end
     vim.api.nvim_set_current_win(item.win)
     vim.api.nvim_win_set_cursor(item.win, item.cursor)
@@ -273,7 +271,10 @@ function M.drop()
   if target and item.win then
     move_pane(item, target)
   elseif target then
-    open_item(item, target.win, target.action)
+    local destination = open_item(item, target.win, target.action)
+    if destination and item.source then
+      require("config.panes").transfer(item.source, destination, item.buf)
+    end
   elseif item and item.buf and not item.win and not item.moved then
     open_item(item, item.target, "current")
   end
@@ -289,15 +290,15 @@ function M.open_menu()
   popup("PimpMyShellOpen")
 end
 
-function M.open_buffer_menu(buf)
+function M.open_buffer_menu(buf, win)
   if not vim.api.nvim_buf_is_valid(buf) then
     return
   end
   clear_preview()
   drag = nil
-  local win = vim.api.nvim_get_current_win()
+  win = win or vim.api.nvim_get_current_win()
   menu = { buf = buf, target = is_editor(win) and win or editor_window() }
-  -- Bufferline invokes this from a tabline click callback. Defer the popup
+  -- Pane tabs invoke this from a winbar click callback. Defer the popup
   -- until that callback finishes, keeping the clicked buffer as its target.
   vim.schedule(function()
     popup("PimpMyShellBuffer")
@@ -337,6 +338,11 @@ function M.setup()
           tree_double_click = false
         end
         return ""
+      end
+      if drag then
+        local escape = vim.fn.mode() == "n" and "" or "<Esc>"
+        local action = event == "<2-LeftRelease>" and "drop" or "update_drag"
+        return escape .. "<Cmd>lua require('config.mouse')." .. action .. "()<CR>"
       end
       return event
     end, { expr = true, desc = "Finish explorer double-click" })
@@ -400,12 +406,6 @@ function M.setup()
     group = group,
     callback = cancel,
   })
-  vim.api.nvim_create_autocmd({ "WinNew", "WinEnter", "BufWinEnter", "FileType" }, {
-    group = group,
-    callback = function()
-      vim.schedule(update_headers)
-    end,
-  })
   vim.on_key(function(_, typed)
     if typed == "\27" then
       drag = nil
@@ -413,7 +413,6 @@ function M.setup()
       vim.schedule(clear_preview)
     end
   end, vim.api.nvim_create_namespace("pimp_my_shell_mouse_cancel"))
-  update_headers()
 end
 
 return M

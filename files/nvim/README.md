@@ -35,14 +35,18 @@ on disk; special buffers and the sidebar are not drop targets. A shaded preview
 labels the current pane or horizontal/vertical split destination while dragging.
 This integration lives in `config/mouse.lua`.
 
-Drag a pane's **⠿ filename** header onto another pane's edge to move that pane,
-or into its center to join the panes. The dragged pane stays visible and both
-files stay in Bufferline, including unsaved changes. Drag a Bufferline filename
-to open that buffer in a pane or new split. The preview labels each destination;
+Each pane has its own clickable file tabs directly above it, replacing the global
+Bufferline row. A new right split has its file tab above that right split.
+Drag a pane's **⠿** grip onto another pane's edge to move the pane and all its tabs,
+or into its center to join the panes. The dragged pane stays visible and the two
+file lists merge, including unsaved changes. Drag a filename to move that file tab
+into another pane or a new split. Dropping onto a pane's tab row also moves the
+file there. Right-click a file tab for the current pane, vertical/horizontal split,
+or new-tab menu; splitting adds another view of the file. The preview labels each destination;
 `Esc` cancels. Divider dragging still resizes panes and text dragging selects text.
 
 Files changed by Codex, Claude Code, or other tools refresh automatically within
-about half a second, including atomic saves and hidden Bufferline buffers.
+about half a second, including atomic saves and files behind inactive tabs.
 Unsaved edits are kept, with a warning when the disk version changes. A deleted
 file also keeps its buffer. `config/reload.lua` uses Neovim's timestamp checks.
 
@@ -57,15 +61,33 @@ always be distinguished from intentional line breaks, so lines aren't reflowed.
 Set `vim.g.pimp_my_shell_clean_paste = false` to disable automatic cleanup.
 This integration lives in `config/paste.lua` and leaves embedded terminal input alone.
 
-Bufferline provides clickable file tabs and red **×** close buttons. Closing
-uses Snacks to preserve the split layout and prompt before discarding edits.
-Modified files show a dot; middle-click their tab to close with a save prompt.
-Closing the last file exits Neovim, after confirming any unsaved work.
+File tabs have red **×** close buttons, including modified files marked **●**.
+Click **×**, or middle-click a filename, to close it. Closing the last tab in a
+pane closes that pane; closing the final file exits Neovim. Save/Discard/Cancel
+protects unsaved work. Closing one shared view retains edits in the other pane.
+Narrow panes show **‹** / **›** buttons to scroll their tabs.
 Typed `:q` / `:quit` closes one pane and removes its file from the bar when no
-other pane displays it. In the last pane, it switches to another open file if
-one remains. `:wq` saves then does the same; `:qa` explicitly quits everything.
-The command abbreviations and closing behavior live in `config/quit.lua`.
-Neovim tab pages continue to represent separate window layouts.
+other pane owns it; the closed pane's other files move to a surviving pane.
+In the last pane, it switches to another open file if one remains. `:wq` saves
+then does the same; `:qa` explicitly quits everything. The file groups and close
+buttons live in `config/panes.lua`; typed quit handling lives in `config/quit.lua`.
+
+Normal-mode shortcuts (`Space` is the leader):
+
+| Keys | Action |
+|------|--------|
+| `Shift+h` / `Shift+l`, or `[b` / `]b` | Previous / next file in this pane |
+| `Space b b` or `Ctrl+6` | Previous active file in this pane |
+| `Space b j` | Pick a file from this pane |
+| `Space ,` or `Space f b` | Pick any open file and add it to this pane |
+| `Space b d` | Close this file tab |
+| `Space b o` | Close other file tabs in this pane |
+| `Space b l` / `Space b r` | Close file tabs to the left / right |
+| `[B` / `]B` | Move the current file tab left / right |
+| `Ctrl+h/j/k/l` | Focus the pane to the left / below / above / right |
+
+Neovim tab pages represent separate pane layouts, with their own native top row
+when multiple layouts are open. Switch between them with `gt` / `gT`.
 
 In Kitty, drag without Shift so Neovim receives the mouse events. Shift is for
 Kitty's terminal text selection. Kitty launch actions and desktop file drops
