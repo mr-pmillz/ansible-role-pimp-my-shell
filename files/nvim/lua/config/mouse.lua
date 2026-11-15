@@ -1,8 +1,10 @@
--- Neo-tree-to-editor drags use terminal mouse events, including in Kitty.
--- No file is moved on disk: dropping only opens a buffer or creates a split.
+-- File and pane drags use terminal mouse events, including in Kitty.
+-- No file is moved on disk; joining panes keeps both buffers in Bufferline.
 local M = {}
 local drag, menu
 local preview
+local tree_double_click = false
+local winbar = "%@v:lua.require'config.mouse'.pane_click@ ⠿ %t %m%=%T"
 
 local function popup(name)
   -- Keep menu labels readable over editor text, and anchor them at the click.
@@ -32,6 +34,31 @@ local function is_editor(win)
     and vim.bo[vim.api.nvim_win_get_buf(win)].buftype == ""
 end
 
+local function update_headers()
+  for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+    local bar = vim.wo[win].winbar
+    if bar == "" or bar == winbar then
+      vim.wo[win].winbar = is_editor(win) and winbar or ""
+    end
+  end
+end
+
+function M.pane_click(_, _, button)
+  if button ~= "l" then
+    return
+  end
+  clear_preview()
+  local win = vim.fn.getmousepos().winid
+  if is_editor(win) then
+    drag = { win = win, buf = vim.api.nvim_win_get_buf(win), cursor = vim.api.nvim_win_get_cursor(win), moved = false }
+    vim.schedule(function()
+      if is_editor(win) then
+        vim.api.nvim_set_current_win(win)
+      end
+    end)
+  end
+end
+
 local function editor_window()
   local prior = require("neo-tree").get_prior_window()
   if prior and is_editor(prior) then
@@ -42,6 +69,12 @@ local function editor_window()
       return win
     end
   end
+end
+
+function M.buffer_click(buf)
+  clear_preview()
+  local win = vim.api.nvim_get_current_win()
+  drag = { buf = buf, target = is_editor(win) and win or editor_window(), moved = false }
 end
 
 local actions = {
@@ -98,9 +131,17 @@ function M.capture()
   end
 end
 
+function M.open_tree_item(state)
+  clear_preview()
+  drag = nil
+  tree_double_click = true
+  -- Keep Neo-tree's directory toggling and source-specific open behavior.
+  state.commands.open(state)
+end
+
 local function drop_target()
   local pos = vim.fn.getmousepos()
-  if not is_editor(pos.winid) then
+  if not is_editor(pos.winid) or (drag and drag.win == pos.winid) then
     return
   end
   local width = vim.api.nvim_win_get_width(pos.winid)
@@ -147,6 +188,15 @@ function M.update_drag()
     above = "Horizontal split: above",
     below = "Horizontal split: below",
   }
+  if drag.win then
+    labels = {
+      current = "Join panes",
+      left = "Move pane: left",
+      right = "Move pane: right",
+      above = "Move pane: above",
+      below = "Move pane: below",
+    }
+  end
   if target.action == "left" or target.action == "right" then
     width = math.max(1, math.floor(width / 2))
     if target.action == "right" then
@@ -181,18 +231,51 @@ function M.update_drag()
     noautocmd = true,
     zindex = 60,
   })
-  vim.wo[win].winblend = 35
+  -- Opaque shading keeps destination labels legible over existing code.
+  vim.wo[win].winblend = 0
   vim.wo[win].winhighlight = "Normal:PimpMyShellDrop,NormalNC:PimpMyShellDrop,EndOfBuffer:PimpMyShellDrop"
   preview = { win = win, key = key }
 end
 
+local function move_pane(item, target)
+  if not is_editor(item.win) or vim.api.nvim_win_get_buf(item.win) ~= item.buf then
+    return
+  end
+  local ok, err = pcall(function()
+    if target.action == "current" then
+      local buf = vim.api.nvim_win_get_buf(target.win)
+      -- :hide preserves unsaved work, but bufhidden=wipe/delete/unload overrides it.
+      local hidden = vim.bo[buf].bufhidden
+      assert(hidden == "" or hidden == "hide", "This pane's buffer cannot safely be hidden")
+    end
+    vim.api.nvim_win_set_config(item.win, {
+      win = target.win,
+      split = target.action == "current" and "left" or target.action,
+    })
+    if target.action == "current" then
+      vim.api.nvim_win_call(target.win, function()
+        vim.api.nvim_cmd({ cmd = "close", mods = { hide = true } }, {})
+      end)
+    end
+    vim.api.nvim_set_current_win(item.win)
+    vim.api.nvim_win_set_cursor(item.win, item.cursor)
+  end)
+  if not ok then
+    vim.notify(tostring(err), vim.log.levels.WARN, { title = "Move pane" })
+  end
+end
+
 function M.drop()
   local item = drag
-  drag = nil
   local target = item and item.moved and drop_target()
+  drag = nil
   clear_preview()
-  if target then
+  if target and item.win then
+    move_pane(item, target)
+  elseif target then
     open_item(item, target.win, target.action)
+  elseif item and item.buf and not item.win and not item.moved then
+    open_item(item, item.target, "current")
   end
 end
 
@@ -235,6 +318,7 @@ function M.setup()
   -- Expression mappings defer window changes until after the native click.
   vim.keymap.set({ "n", "i", "x" }, "<LeftMouse>", function()
     drag = nil
+    tree_double_click = false
     -- Clear a preview left behind when a release happened outside the terminal.
     vim.schedule(clear_preview)
     if is_tree(vim.fn.getmousepos().winid) then
@@ -243,20 +327,37 @@ function M.setup()
     end
     return "<LeftMouse>"
   end, { expr = true, desc = "Select file or start explorer drag" })
-  vim.keymap.set("n", "<LeftDrag>", function()
+  -- Neo-tree opens on the second press. Its release then reaches the editor,
+  -- where native <2-LeftRelease> starts Visual mode and opens WhichKey's menu.
+  -- Consume just the rest of that explorer gesture; editor word selection stays native.
+  for _, event in ipairs({ "<2-LeftDrag>", "<2-LeftRelease>" }) do
+    vim.keymap.set({ "n", "i", "x" }, event, function()
+      if tree_double_click then
+        if event == "<2-LeftRelease>" then
+          tree_double_click = false
+        end
+        return ""
+      end
+      return event
+    end, { expr = true, desc = "Finish explorer double-click" })
+  end
+  vim.keymap.set({ "n", "i", "x" }, "<LeftDrag>", function()
     if drag then
-      return "<Cmd>lua require('config.mouse').update_drag()<CR>"
+      local escape = vim.fn.mode() == "n" and "" or "<Esc>"
+      return escape .. "<Cmd>lua require('config.mouse').update_drag()<CR>"
     end
     return "<LeftDrag>"
-  end, { expr = true, desc = "Drag explorer file to a pane" })
-  vim.keymap.set("n", "<LeftRelease>", function()
+  end, { expr = true, desc = "Drag file or move pane" })
+  vim.keymap.set({ "n", "i", "x" }, "<LeftRelease>", function()
     if drag then
-      return "<Cmd>lua require('config.mouse').drop()<CR>"
+      local escape = vim.fn.mode() == "n" and "" or "<Esc>"
+      return escape .. "<Cmd>lua require('config.mouse').drop()<CR>"
     end
     return "<LeftRelease>"
-  end, { expr = true, desc = "Open file at drop position" })
+  end, { expr = true, desc = "Drop file or pane" })
   vim.keymap.set({ "n", "i", "x" }, "<RightMouse>", function()
     drag = nil
+    tree_double_click = false
     local pos = vim.fn.getmousepos()
     local escape = vim.fn.mode() == "n" and "" or "<Esc>"
     if is_tree(pos.winid) then
@@ -289,13 +390,30 @@ function M.setup()
       )
     )
   end
+  local group = vim.api.nvim_create_augroup("pimp_my_shell_mouse", { clear = true })
+  local function cancel()
+    drag, menu = nil, nil
+    tree_double_click = false
+    clear_preview()
+  end
   vim.api.nvim_create_autocmd({ "TabLeave", "FocusLost", "InsertEnter" }, {
-    group = vim.api.nvim_create_augroup("pimp_my_shell_mouse", { clear = true }),
+    group = group,
+    callback = cancel,
+  })
+  vim.api.nvim_create_autocmd({ "WinNew", "WinEnter", "BufWinEnter", "FileType" }, {
+    group = group,
     callback = function()
-      drag, menu = nil, nil
-      clear_preview()
+      vim.schedule(update_headers)
     end,
   })
+  vim.on_key(function(_, typed)
+    if typed == "\27" then
+      drag = nil
+      tree_double_click = false
+      vim.schedule(clear_preview)
+    end
+  end, vim.api.nvim_create_namespace("pimp_my_shell_mouse_cancel"))
+  update_headers()
 end
 
 return M

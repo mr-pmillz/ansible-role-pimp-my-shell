@@ -83,8 +83,10 @@ def check_mouse(root: Path) -> None:
 
     def reset():
         nvim.input("<Esc>")
+        settle()  # Finish mode changes and deferred popup cleanup before rebuilding the layout.
         nvim.command("silent! tabonly!")
         nvim.command("silent! Neotree close")
+        settle()
         nvim.command("only!")
         lua("vim.api.nvim_cmd({cmd='edit',args={...},magic={file=false}}, {})", str(first))
         target = nvim.current.window.handle
@@ -122,6 +124,7 @@ def check_mouse(root: Path) -> None:
 
     def geometry(win):
         row, col = nvim.api.win_get_position(win)
+        row += bool(nvim.api.get_option_value("winbar", {"win": win}))
         return row, col, nvim.api.win_get_height(win), nvim.api.win_get_width(win)
 
     def pane_count():
@@ -175,17 +178,46 @@ def check_mouse(root: Path) -> None:
         assert pane_count() == 2
         print("PASS: click selects; dropping back in sidebar does nothing", flush=True)
 
+        for mode, key in (("normal", ""), ("insert", "i"), ("visual", "v")):
+            target = reset()
+            if key:
+                nvim.input(key)
+                settle()
+            _, row, col = tree_file()
+            nvim.options["mousetime"] = 500
+            mouse("press", row, col)
+            mouse("release", row, col)
+            mouse("press", row, col)
+            # A small movement before release must not select text in the new file.
+            if mode == "insert":
+                mouse("drag", row, col + 1)
+            mouse("release", row, col)
+            assert nvim.current.buffer.name == str(second)
+            assert nvim.current.window.handle == target
+            assert nvim.api.get_mode()["mode"] == "n", "Explorer double-click entered Visual mode"
+            # The regression is delayed: WhichKey opens +Visual after its timer fires.
+            time.sleep(0.4)
+            nvim.api.get_mode()
+            assert not lua("""
+              for _, win in ipairs(vim.api.nvim_list_wins()) do
+                if vim.bo[vim.api.nvim_win_get_buf(win)].filetype == 'wk' then return true end
+              end
+              return false
+            """), "Explorer double-click opened the Visual shortcut popup"
+            nvim.options["mousetime"] = 1
+            print(f"PASS: explorer double-click from {mode} opens normally without the Visual popup", flush=True)
+
         target = reset()
-        _, row, col = tree_file()
+        row, col, _, _ = geometry(target)
         nvim.options["mousetime"] = 500
-        mouse("press", row, col)
-        mouse("release", row, col)
-        mouse("press", row, col)
-        mouse("release", row, col)
-        assert nvim.current.buffer.name == str(second)
-        assert nvim.current.window.handle == target
+        mouse("press", row + 3, col + 10)
+        mouse("release", row + 3, col + 10)
+        mouse("press", row + 3, col + 10)
+        mouse("release", row + 3, col + 10)
+        assert nvim.api.get_mode()["mode"] == "v", "Editor double-click should still select words"
+        nvim.input("<Esc>")
         nvim.options["mousetime"] = 1
-        print("PASS: double-click opens the sidebar file", flush=True)
+        print("PASS: double-clicking editor text still selects a word", flush=True)
 
         for mode, key in (("insert", "i"), ("visual", "v")):
             target = reset()
@@ -297,6 +329,132 @@ def check_mouse(root: Path) -> None:
         assert nvim.current.buffer.name == str(first)
         assert pane_count() == 2
         print("PASS: cancelling the bufferline menu keeps the current file and layout", flush=True)
+
+        for zone in ("left", "right", "above", "below", "current"):
+            target = reset()
+            nvim.command("vsplit")
+            lua("vim.api.nvim_cmd({cmd='edit',args={...},magic={file=false}}, {})", str(second))
+            source = nvim.current.window.handle
+            source_buf = nvim.current.buffer.number
+            target_buf = nvim.api.win_get_buf(target)
+            nvim.api.win_set_cursor(source, [12, 3])
+            nvim.current.buffer[0] = "unsaved source"
+            nvim.api.buf_set_lines(target_buf, 0, 1, False, ["unsaved destination"])
+            # Move across a nested layout without disturbing the third pane.
+            nvim.api.set_current_win(target)
+            nvim.command("aboveleft split")
+            third = nvim.current.window.handle
+            nvim.api.set_current_win(target)
+            if zone == "above":
+                nvim.input("i")
+            elif zone == "below":
+                nvim.input("v")
+            settle()
+            row, col, height, width = geometry(target)
+            y = row + (0 if zone == "above" else height - 1 if zone == "below" else height // 2)
+            x = col + (0 if zone == "left" else width - 1 if zone == "right" else width // 2)
+            start_row, start_col = nvim.api.win_get_position(source)
+            before = pane_count()
+            mouse("press", start_row, start_col + 6)
+            mouse("drag", y, x)
+            assert len(previews()) == 1, (zone, screen())
+            label = "Join panes" if zone == "current" else f"Move pane: {zone}"
+            assert label in "\n".join(screen()), screen()
+            mouse("release", y, x)
+            assert not previews()
+            assert nvim.current.window.handle == source, (zone, screen())
+            assert nvim.api.win_get_cursor(source) == [12, 3]
+            assert nvim.api.win_get_buf(source).number == source_buf
+            assert nvim.api.win_is_valid(third)
+            assert listed(source_buf) and listed(target_buf)
+            assert nvim.api.buf_get_lines(target_buf, 0, 1, False) == ["unsaved destination"]
+            assert nvim.current.buffer[0] == "unsaved source"
+            if zone == "current":
+                assert not nvim.api.win_is_valid(target)
+                assert pane_count() == before - 1
+            else:
+                assert pane_count() == before
+                sy, sx, _, _ = geometry(source)
+                ty, tx, _, _ = geometry(target)
+                assert {"left": sx < tx, "right": sx > tx,
+                        "above": sy < ty, "below": sy > ty}[zone]
+            nvim.command("edit!")
+            nvim.api.set_current_win(third)
+            nvim.command("edit!")
+            print(f"PASS: pane header drag {zone} preserves windows, cursor, and unsaved buffers", flush=True)
+
+        target = reset()
+        row, col, height, width = geometry(target)
+        mouse("press", row - 1, col + 6)
+        mouse("drag", row + height // 2, col + width // 2)
+        assert not previews()
+        mouse("release", row + height // 2, col + width // 2)
+        assert pane_count() == 2
+        nvim.command("vsplit")
+        source = nvim.current.window.handle
+        settle()
+        row, col, height, width = geometry(target)
+        sy, sx = nvim.api.win_get_position(source)
+        mouse("press", sy, sx + 6)
+        mouse("drag", row + height // 2, col + width // 2)
+        assert previews()
+        nvim.input("<Esc>")
+        settle()
+        assert not previews()
+        mouse("release", row + height // 2, col + width // 2)
+        assert pane_count() == 3
+        print("PASS: same-pane drops and Escape cancel pane moves", flush=True)
+
+        # Neither file is visible elsewhere: joining must hide the dirty target safely.
+        target = reset()
+        target_buf = nvim.api.win_get_buf(target)
+        nvim.command("vsplit")
+        lua("vim.api.nvim_cmd({cmd='edit',args={...},magic={file=false}}, {})", str(second))
+        source = nvim.current.window.handle
+        nvim.api.buf_set_lines(target_buf, 0, 1, False, ["hidden unsaved target"])
+        nvim.options["hidden"] = False
+        settle()
+        sy, sx = nvim.api.win_get_position(source)
+        row, col, height, width = geometry(target)
+        mouse("press", sy, sx + 6)
+        mouse("release", sy, sx + 6)
+        assert nvim.current.window.handle == source and pane_count() == 3
+        mouse("press", sy, sx + 6)
+        mouse("drag", row + height // 2, col + width // 2)
+        mouse("release", row + height // 2, col + width // 2)
+        assert pane_count() == 2
+        assert listed(target_buf)
+        assert nvim.api.buf_get_lines(target_buf, 0, 1, False) == ["hidden unsaved target"]
+        assert nvim.api.get_option_value("modified", {"buf": target_buf})
+        nvim.options["hidden"] = True
+        nvim.api.set_current_buf(target_buf)
+        nvim.command("edit!")
+        print("PASS: join retains a hidden dirty file even with nohidden set; header clicks only focus", flush=True)
+
+        for zone in ("current", "left", "right", "above", "below"):
+            target = reset()
+            lua("vim.fn.bufload(vim.fn.bufadd(...))", str(second))
+            nvim.command("redraw!")
+            settle()
+            tab_col = screen()[0].index("second space") + 2
+            row, col, height, width = geometry(target)
+            y = row + (0 if zone == "above" else height - 1 if zone == "below" else height // 2)
+            x = col + (0 if zone == "left" else width - 1 if zone == "right" else width // 2)
+            if zone == "above":
+                nvim.input("i")
+            elif zone == "below":
+                nvim.input("v")
+            settle()
+            mouse("press", 0, tab_col)
+            mouse("drag", y, x)
+            assert len(previews()) == 1, (zone, screen())
+            mouse("release", y, x)
+            assert not previews()
+            assert nvim.current.buffer.name == str(second), (zone, screen())
+            assert pane_count() == (2 if zone == "current" else 3)
+            if zone != "current":
+                assert nvim.api.buf_get_name(nvim.api.win_get_buf(target)) == str(first)
+            print(f"PASS: bufferline drag opens the file in {zone} pane", flush=True)
 
         target = reset()
         row, col, height, width = geometry(target)

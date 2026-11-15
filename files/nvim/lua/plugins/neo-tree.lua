@@ -78,6 +78,9 @@ return {
       },
       window = {
         mappings = {
+          ["<2-LeftMouse>"] = function(state)
+            require("config.mouse").open_tree_item(state)
+          end,
           ["l"] = "open",
           ["h"] = "close_node",
           ["<space>"] = "none",

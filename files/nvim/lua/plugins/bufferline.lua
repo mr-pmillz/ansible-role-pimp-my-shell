@@ -7,6 +7,9 @@ return {
       show_buffer_close_icons = true,
       show_close_icon = false,
       buffer_close_icon = "×",
+      left_mouse_command = function(buf)
+        require("config.mouse").buffer_click(buf)
+      end,
       -- Keep the pane layout while files remain; confirm before losing edits.
       close_command = function(buf)
         require("config.quit").close_buffer(buf)

@@ -121,11 +121,24 @@
             dest: /tmp/pimp-my-shell-mouse-verify.py
             mode: "0644"
 
-        - name: Verify explorer dragging, split targets, and clickable file tabs
+        - name: Verify file and pane dragging, joining, and clickable file tabs
           ansible.builtin.command:
             argv:
               - "{{ ansible_facts['env']['XDG_DATA_HOME'] | default(ansible_facts['env']['HOME'] + '/.local/share', true) }}/nvim/python/bin/python"
               - /tmp/pimp-my-shell-mouse-verify.py
+          changed_when: false
+
+        - name: Install external edit and paste regression checks
+          ansible.builtin.copy:
+            src: "{{ playbook_dir }}/../../tests/editor.py"
+            dest: /tmp/pimp-my-shell-editor-verify.py
+            mode: "0644"
+
+        - name: Verify agent file reloads and terminal paste cleanup
+          ansible.builtin.command:
+            argv:
+              - "{{ ansible_facts['env']['XDG_DATA_HOME'] | default(ansible_facts['env']['HOME'] + '/.local/share', true) }}/nvim/python/bin/python"
+              - /tmp/pimp-my-shell-editor-verify.py
           changed_when: false
 
         - name: Install provider and SQLite regression checks

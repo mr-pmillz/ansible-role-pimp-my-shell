@@ -362,6 +362,9 @@ Bufferline shows open files across the top with red **×** close buttons.
 | Drop within the top/bottom two rows of a pane | Create a split above/below |
 | Right-click a sidebar file | Choose current pane, split left/right/above/below, or new tab |
 | Click a filename in the top bar | Switch to that buffer |
+| Drag a filename from the top bar | Open that buffer in the highlighted pane or new split |
+| Drag a pane's **⠿ filename** header onto another pane's edge | Move the pane to that split position |
+| Drag a pane's header into another pane's center | Join the panes; keep both files in Bufferline |
 | Right-click a filename in the top bar | Choose current pane, vertical split, horizontal split, or new tab |
 | Click its red **×**, or middle-click the filename | Close the buffer; the last file closes the editor |
 | Drag a split divider | Resize the panes |
@@ -374,6 +377,9 @@ right-click menu when you want an explicit destination. “Current pane” in th
 menu means the last active editor pane. Unsaved buffers show a dot instead of
 **×**; middle-click offers Save/Discard/Cancel, or save first to restore the **×**.
 Neovim tab pages still hold independent pane layouts; the file bar lists buffers.
+Pane moves preserve the window and cursor. Joining keeps unsaved changes in both
+buffers; the dragged pane stays visible. `Esc` cancels a drag. Pane headers use
+the editor theme and reserve text dragging for selection.
 
 Typed `:q` / `:quit` closes the active editor pane and removes its file from the
 bar if no other pane displays it. In the last editor pane, it closes the current
@@ -386,7 +392,7 @@ typed commands; plugin/API calls to Neovim's built-in quit retain native behavio
 In **Kitty**, use these gestures **without Shift**. Kitty already forwards mouse
 events when Neovim requests them; Shift gives Kitty control for terminal text
 selection. No Kitty mouse remapping is needed for these in-editor drags.
-The role supplies a small Neo-tree drag adapter in `config/mouse.lua` alongside
+The role supplies file and pane drag handling in `config/mouse.lua` alongside
 the existing plugins.
 
 Kitty's [mouse mappings and paste filters](https://sw.kovidgoyal.net/kitty/conf/#mouse-actions)
@@ -397,6 +403,27 @@ Those rules do not select panes inside an existing Neovim process. Desktop file
 drops and Kitty's [drag-and-drop protocol](https://sw.kovidgoyal.net/kitty/kittens/dnd/)
 are separate from dragging within Neo-tree; this configuration does not turn
 ordinary pasted paths or desktop drops into editor commands.
+
+### Agent edits and terminal pastes
+
+Files edited by Codex, Claude Code, or another process automatically reload
+within about half a second, even when you're working in another tmux pane.
+Atomic file replacements and hidden Bufferline buffers are checked too.
+Unsaved Neovim edits are retained with a warning if the disk version changes;
+deleted files retain their buffer contents for recovery.
+
+Normal terminal pastes clean carriage returns (`^M`) and ANSI formatting codes
+while keeping indentation and blank lines. For agent output with terminal
+padding or excessive blank lines, use **Space p a** or `:PasteAgent`: it reads
+the tmux copy buffer, removes common leading spaces, and reduces runs of blank
+lines to one. Relative code indentation is preserved and a single undo reverses
+the paste. Outside tmux, it uses the clipboard; `:PasteAgent +` selects the
+clipboard explicitly, and `:PasteAgent a` reads Vim register `a`.
+
+Hard-wrapped terminal lines aren't automatically joined because they may be
+intentional code or paragraph boundaries. The implementations are
+`config/reload.lua` and `config/paste.lua`; set
+`vim.g.pimp_my_shell_clean_paste = false` to disable automatic paste cleanup.
 
 ### Useful hotkeys for power users
 

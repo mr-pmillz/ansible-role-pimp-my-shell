@@ -35,6 +35,28 @@ on disk; special buffers and the sidebar are not drop targets. A shaded preview
 labels the current pane or horizontal/vertical split destination while dragging.
 This integration lives in `config/mouse.lua`.
 
+Drag a pane's **⠿ filename** header onto another pane's edge to move that pane,
+or into its center to join the panes. The dragged pane stays visible and both
+files stay in Bufferline, including unsaved changes. Drag a Bufferline filename
+to open that buffer in a pane or new split. The preview labels each destination;
+`Esc` cancels. Divider dragging still resizes panes and text dragging selects text.
+
+Files changed by Codex, Claude Code, or other tools refresh automatically within
+about half a second, including atomic saves and hidden Bufferline buffers.
+Unsaved edits are kept, with a warning when the disk version changes. A deleted
+file also keeps its buffer. `config/reload.lua` uses Neovim's timestamp checks.
+
+Terminal pastes automatically normalize carriage returns and strip ANSI color
+and hyperlink codes. Normal paste preserves blank lines and code indentation.
+For copied agent output, **Space p a** (or `:PasteAgent`) reads the tmux copy
+buffer and also removes common leading spaces and collapses excess blank lines
+to one. Outside tmux it reads the system clipboard; `:PasteAgent +` explicitly
+uses the clipboard and `:PasteAgent a` uses register `a`. Relative indentation
+is preserved, and one undo reverses the paste. Terminal soft wrapping cannot
+always be distinguished from intentional line breaks, so lines aren't reflowed.
+Set `vim.g.pimp_my_shell_clean_paste = false` to disable automatic cleanup.
+This integration lives in `config/paste.lua` and leaves embedded terminal input alone.
+
 Bufferline provides clickable file tabs and red **×** close buttons. Closing
 uses Snacks to preserve the split layout and prompt before discarding edits.
 Modified files show a dot; middle-click their tab to close with a save prompt.
