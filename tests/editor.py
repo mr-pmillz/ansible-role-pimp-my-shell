@@ -151,10 +151,22 @@ def check_editor(root: Path) -> None:
                 terminal.command("enew")
                 terminal.command("setlocal autoindent smartindent")
                 terminal.input("i")
-                subprocess.run(tmux + ["load-buffer", "-"], input=b"\x1b[32mdef demo():\x1b[0m\n    return 1\n\nnext", check=True)
+                # Copy-mode text has no ANSI escapes. tmux 3.7+ sanitizes control
+                # characters in paste-buffer, so injected ESC bytes would become
+                # literal ^[ text before reaching Neovim. Raw ANSI cleanup is
+                # covered by the direct and streamed nvim_paste checks above.
+                copied_text = b"def demo():\n    return 1\n\nnext"
+                subprocess.run(tmux + ["load-buffer", "-"], input=copied_text, check=True)
                 subprocess.run(tmux + ["paste-buffer", "-p", "-t", "paste-test:editor"], check=True)
-                wait_for(lambda: terminal.current.buffer[:] == expected, "tmux bracketed paste changed indentation or line breaks")
-                print("PASS: actual tmux bracketed paste into Neovim cleans formatting without autoindent artifacts", flush=True)
+                try:
+                    wait_for(lambda: terminal.current.buffer[:] == expected, "tmux bracketed paste changed indentation or line breaks")
+                except AssertionError as error:
+                    version = subprocess.run(["tmux", "-V"], capture_output=True, text=True, check=True).stdout.strip()
+                    raise AssertionError(
+                        f"{error}; {version}; mode={terminal.api.get_mode()!r}; "
+                        f"expected={expected!r}; actual={terminal.current.buffer[:]!r}"
+                    ) from error
+                print("PASS: actual tmux bracketed paste into Neovim preserves line breaks and indentation", flush=True)
             finally:
                 terminal.close()
         finally:
